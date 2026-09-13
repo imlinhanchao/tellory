@@ -216,8 +216,13 @@ export function applyPassageEntryEffects(
   sdkApplyPassageEntryEffects(content, variables, engineCtx);
 }
 
+function decodeHTMLEntities(str: string) {
+  const doc = new DOMParser().parseFromString(str, 'text/html');
+  return doc.documentElement.textContent;
+}
+
 export function applyStoryAction(action: string, variables: VariableMap): void {
-  sdkApplyStoryAction(action, variables, engineCtx);
+  sdkApplyStoryAction(decodeHTMLEntities(action), variables, engineCtx);
 }
 
 export function renderStoryText(

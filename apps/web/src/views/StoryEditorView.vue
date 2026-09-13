@@ -182,6 +182,15 @@
                   <Icon icon="mdi:hammer" size="16px" />
                 </button>
               </div>
+              <div class="tooltip tooltip-bottom" data-tip="段落关系图">
+                <button
+                  class="btn btn-sm btn-ghost btn-square"
+                  type="button"
+                  @click="openGraph"
+                >
+                  <Icon icon="mdi:graph-outline" size="16px" />
+                </button>
+              </div>
               <template v-if="!props.readOnly">
                 <div v-if="currentStoryId" class="tooltip tooltip-bottom" data-tip="试玩故事">
                   <button
@@ -447,6 +456,62 @@
         </template>
       </div>
     </dialog>
+    <dialog ref="graphRef" class="modal" @close="graphFullscreen = false">
+      <div
+        class="modal-box w-screen p-2!"
+        :class="
+          graphFullscreen
+            ? 'flex h-dvh max-h-none max-w-none flex-col rounded-none'
+            : 'max-w-6xl'
+        "
+      >
+        <div class="mb-2 flex items-center justify-between px-2 pt-1">
+          <h3 class="flex items-center gap-2 text-lg font-bold">
+            <Icon icon="mdi:graph-outline" class="text-xl text-primary" />
+            段落关系图
+          </h3>
+          <div class="flex items-center gap-1">
+            <div
+              class="tooltip tooltip-bottom"
+              :data-tip="graphFullscreen ? '退出全屏' : '全屏显示'"
+            >
+              <button
+                class="btn btn-sm btn-circle btn-ghost"
+                type="button"
+                :aria-label="graphFullscreen ? '退出全屏' : '全屏显示'"
+                @click="toggleGraphFullscreen"
+              >
+                <Icon
+                  :icon="
+                    graphFullscreen ? 'mdi:fullscreen-exit' : 'mdi:fullscreen'
+                  "
+                  size="16px"
+                />
+              </button>
+            </div>
+            <form method="dialog">
+              <button class="btn btn-sm btn-circle btn-ghost" type="submit">
+                <Icon icon="mdi:close" size="16px" />
+              </button>
+            </form>
+          </div>
+        </div>
+        <div class="min-h-0" :class="{ grow: graphFullscreen }">
+          <StoryGraph
+            :story="graphStory"
+            :active-passage="selectedPassage"
+            :height="graphFullscreen ? '100%' : '68vh'"
+            @select-passage="openPassageFromGraph"
+          />
+        </div>
+        <p class="mt-2 px-2 text-xs text-base-content/50">
+          点击任一段落即可切换编辑目标；滚轮缩放，拖拽平移。
+        </p>
+      </div>
+      <form method="dialog" class="modal-backdrop">
+        <button type="submit">close</button>
+      </form>
+    </dialog>
     <SyntaxManual v-if="showManual" @close="showManual = false" />
   </div>
 </template>
@@ -470,6 +535,7 @@ import {
 import StoryPlayView from "@/views/StoryPlayView.vue";
 import StoryEditorPanel from "@/components/StoryEditor/StoryEditorPanel.vue";
 import StoryRightPanel from "@/components/StoryEditor/StoryRightPanel.vue";
+import StoryGraph from "@/components/StoryGraph/src/StoryGraph.vue";
 import {
   createDefaultStory,
   createEmptyStory,
@@ -506,6 +572,7 @@ const isMobile = computed(() => appStore.isMobile);
 const router = useRouter();
 const passageRef = ref<HTMLDialogElement | null>(null);
 const previewRef = ref<HTMLDialogElement | null>(null);
+const graphRef = ref<HTMLDialogElement | null>(null);
 const jsonEditorRef = ref<HTMLDivElement | null>(null);
 let cmInstance: any = null;
 // CodeMirror instance for story editor
@@ -1040,6 +1107,23 @@ const submitForReview = async () => {
 
 const selectPassage = (name: string) => {
   selectedPassage.value = name;
+};
+
+/** 关系图弹窗：展示段落之间的跳转/包含关系。 */
+const graphStory = computed(() => story.value as unknown as StoryData);
+const graphFullscreen = ref(false);
+
+const openGraph = () => {
+  graphRef.value?.showModal();
+};
+
+const toggleGraphFullscreen = () => {
+  graphFullscreen.value = !graphFullscreen.value;
+};
+
+const openPassageFromGraph = (name: string) => {
+  selectPassage(name);
+  graphRef.value?.close();
 };
 
 // keep tag editor sync with selected passage

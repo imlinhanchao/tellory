@@ -4,7 +4,7 @@
 
 **位置**
 
-- 引擎核心实现：`src/lib/storyEngine.ts`
+- 引擎核心实现：`packages/sdk`
 - 编辑器视图：`src/views/StoryEditorView.vue`
 - 播放视图：`src/views/StoryPlayView.vue`
 - 全局样式：`src/styles/main.css`
