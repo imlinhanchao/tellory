@@ -28,6 +28,7 @@ export const ALLOWED_HTML_TAGS: Set<string> = new Set([
   "sub",
   "del",
   "style",
+  "img",
 ]);
 
 /** Block-level tags used to decide paragraph wrapping and newline trimming. */

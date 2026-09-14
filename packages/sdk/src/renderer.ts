@@ -848,6 +848,7 @@ export const MARKDOWN_RAW_HTML_BLOCK_TAGS = new Set([
   "h4",
   "h5",
   "h6",
+  "img",
 ]);
 
 /**
@@ -871,6 +872,18 @@ export function renderMarkdownInline(input: string): string {
         codePlaceholders.push(`<code>${escapeHtml(code)}</code>`);
         return placeholder;
       });
+
+      // Images: ![alt](src "title") or ![alt](src 'title') or ![alt](src)
+      working = working.replace(
+        /!\[([^\]]*)\]\(\s*([^\s)]+)(?:\s+(?:"([^"]*)"|'([^']*)'))?\s*\)/g,
+        (_full, alt, src, title1, title2) => {
+          const safeSrc = escapeHtml(String(src).trim());
+          const safeAlt = escapeHtml(String(alt));
+          const title = title1 ?? title2 ?? "";
+          const titleAttr = title ? ` title="${escapeHtml(title)}"` : "";
+          return `<img src="${safeSrc}" alt="${safeAlt}"${titleAttr}>`;
+        },
+      );
 
       working = working.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
       working = working.replace(/__([^_]+)__/g, "<strong>$1</strong>");
