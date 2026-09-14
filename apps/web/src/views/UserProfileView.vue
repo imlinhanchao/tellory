@@ -78,14 +78,14 @@
                 <span class="font-bold text-primary">{{ getCombinedProgress(p).percent || 0 }}%</span>
               </div>
               <progress
-                v-if="(p.points || []).length > 0 || (p.end || []).length > 0"
+                v-if="p.pointSize || p.endSize"
                 class="progress progress-primary w-full h-2 bg-base-200"
                 :value="getCombinedProgress(p).percent || 0"
                 max="100"
               ></progress>
               <div class="flex gap-2">
                 <button
-                  v-if="(p.points || []).length > 0"
+                  v-if="p.pointSize"
                   class="badge badge-soft badge-xs badge-warning p-3 cursor-pointer rounded-lg flex-1"
                   @click="openUnlockModal(p, 'points')"
                 >
@@ -93,7 +93,7 @@
                   成就 {{ (p.points || []).length }} / {{ p.pointSize || 0 }}
                 </button>
                 <button
-                  v-if="(p.end || []).length > 0"
+                  v-if="p.endSize"
                   class="badge badge-soft badge-xs badge-success p-3 cursor-pointer rounded-lg flex-1"
                   @click="openUnlockModal(p, 'endings')"
                 >
