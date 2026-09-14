@@ -490,6 +490,13 @@
               {{ syntaxIssues.length && !props.readOnly ? "取消" : "关闭" }}
             </button>
             <button
+              class="btn btn-soft"
+              type="button"
+              @click="copySyntaxResultsAsMarkdown"
+            >
+              复制
+            </button>
+            <button
               v-if="syntaxIssues.length && !props.readOnly"
               class="btn btn-warning"
               type="button"
@@ -1114,6 +1121,29 @@ const cancelSyntaxSave = () => {
 const confirmSyntaxSave = async () => {
   closeSyntaxDialog();
   await performSave();
+};
+
+const copySyntaxResultsAsMarkdown = async () => {
+  const lines: string[] = [];
+  lines.push(`# 语法检查结果：${story.value.title || "(未命名)"}`);
+  lines.push(``);
+  if (!syntaxIssues.value || syntaxIssues.value.length === 0) {
+    lines.push(`- ✅ 无语法问题，检查通过。`);
+  } else {
+    for (const issue of syntaxIssues.value) {
+      const lineInfo = issue.line ? `（第 ${issue.line} 行）` : "";
+      const label = syntaxIssueLabel(issue.type as any);
+      lines.push(`- **${label}**：段落「${issue.passage}」${lineInfo} — ${issue.message}`);
+    }
+  }
+  const md = lines.join("\n");
+  try {
+    await navigator.clipboard.writeText(md);
+    msg.success("已复制");
+  } catch (e) {
+    console.error(e);
+    msg.error("复制失败，请手动复制");
+  }
 };
 
 /** 真正执行服务端保存，失败时回退到本地草稿。 */

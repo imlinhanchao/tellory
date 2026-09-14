@@ -2,9 +2,9 @@
   <div>
     <div class="fixed inset-0 bg-black/40 z-40" @click="close"></div>
     <aside
-      class="fixed right-0 top-0 h-full w-96 z-50 bg-base-100 border-l border-base-300 shadow-xl overflow-auto"
+      class="fixed right-0 top-0 h-full w-96 z-50 bg-base-100 border-l border-base-300 shadow-xl"
     >
-      <div class="p-4">
+      <div class="p-4 flex flex-col h-full">
         <div class="flex items-center justify-between mb-3">
           <h3 class="text-lg font-bold">语法说明书</h3>
           <button
@@ -27,7 +27,22 @@
           </button>
         </div>
 
-        <div class="space-y-4">
+        <div class="tabs">
+          <button
+            :class="['tab', currentTab === 'manual' ? 'tab-active' : '']"
+            @click="currentTab = 'manual'"
+          >
+            语法
+          </button>
+          <button
+            :class="['tab', currentTab === 'ai' ? 'tab-active' : '']"
+            @click="currentTab = 'ai'"
+          >
+            AI创作
+          </button>
+        </div>
+
+        <div v-if="currentTab === 'manual'" class="space-y-4 flex-1 overflow-auto">
           <section class="rounded-2xl border border-base-300 bg-base-200 p-4">
             <h4 class="mb-3 font-semibold">变量与赋值</h4>
             <div class="space-y-3 text-sm leading-7 text-base-content/80">
@@ -144,14 +159,64 @@
             </div>
           </section>
         </div>
+
+        <div v-if="currentTab === 'ai'" class="space-y-4 flex-1 overflow-auto">
+          <section class="rounded-2xl border border-base-300 bg-base-200 p-4">
+            <h4 class="mb-3 font-semibold">AI 创作工具</h4>
+            <div class="space-y-3 text-sm leading-7 text-base-content/80">
+              <p>
+                可使用 Skill <strong>tellory-writing</strong> 辅助创作。
+                安装命令：
+              </p>
+              <div class="flex items-start gap-2">
+                <pre class="rounded bg-base-100 px-3 py-1 font-mono text-xs leading-6 flex-1">npx skills add imlinhanchao/tellory</pre>
+                <button class="btn btn-sm btn-soft" @click="copyInstall">复制</button>
+              </div>
+              <p>或者直接使用下方的标准提示词（Prompt.md）作为 AI 创作提示：</p>
+
+              <div class="relative">
+                <button class="btn btn-sm absolute right-2 top-2" @click="copyPrompt">
+                  <span v-if="!copied">复制提示词</span>
+                  <span v-else>已复制</span>
+                </button>
+                <pre class="rounded bg-base-100 p-3 font-mono text-xs leading-6 whitespace-pre-wrap max-h-[150px] overflow-auto">{{ promptText }}</pre>
+              </div>
+            </div>
+          </section>
+        </div>
       </div>
     </aside>
   </div>
 </template>
 
 <script setup lang="ts">
+import { ref } from 'vue'
+import promptText from '~/skills/tellory-writing/Prompt.md?raw'
 const emit = defineEmits(["close"]);
 const close = () => emit("close");
+
+const currentTab = ref<'manual' | 'ai'>('manual')
+const copied = ref(false)
+
+const installCmd = 'npx skills add imlinhanchao/tellory'
+const copyInstall = async () => {
+  try {
+    await navigator.clipboard.writeText(installCmd)
+    copied.value = true
+    setTimeout(() => (copied.value = false), 1200)
+  } catch (e) {
+    // ignore
+  }
+}
+const copyPrompt = async () => {
+  try {
+    await navigator.clipboard.writeText(promptText)
+    copied.value = true
+    setTimeout(() => (copied.value = false), 1200)
+  } catch (e) {
+    // ignore
+  }
+}
 </script>
 
 <style scoped>
