@@ -151,6 +151,9 @@ div.CodeMirror {
     Consolas,
     Liberation Mono,
     monospace;
+  &.CodeMirror-wrap pre.CodeMirror-line, &.CodeMirror-wrap pre.CodeMirror-line-like,  pre.CodeMirror-line, pre.CodeMirror-line-like {
+    word-break: break-all;
+  }
 }
 
 .modal {
