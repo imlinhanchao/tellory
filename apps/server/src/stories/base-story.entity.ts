@@ -16,6 +16,12 @@ export abstract class BaseStoryFields {
   @Column({ comment: '文章段落数', nullable: true })
   passageSize: number;
 
+  @Column({ comment: '成就数量', nullable: true })
+  pointSize: number;
+
+  @Column({ comment: '结局数量', nullable: true })
+  endSize: number;
+
   @Column({ comment: '起始段落', nullable: true })
   startPassage?: string;
 

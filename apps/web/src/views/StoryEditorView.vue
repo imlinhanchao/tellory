@@ -563,6 +563,7 @@ import {
   serializeStory,
   buildInitialVariables,
   checkStorySyntax,
+  extractStorySpecials,
   type StoryData,
   type StorySyntaxIssue,
   buildStandaloneExport,
@@ -1100,6 +1101,18 @@ const performSave = async () => {
     ...omit(story.value, ["passages", "author"]),
     content: serializeStory(story.value),
     passageSize: story.value.passages.length,
+    // compute achievement (point) and ending counts
+    ...(() => {
+      try {
+        const specials = extractStorySpecials(story.value as StoryData);
+        return {
+          pointSize: (specials.points || []).length,
+          endSize: (specials.endings || []).length,
+        };
+      } catch (e) {
+        return { pointSize: 0, endSize: 0 };
+      }
+    })(),
     status: 'draft'
   };
   try {

@@ -36,6 +36,8 @@ export interface IUserStoryProgress {
   points: IUnlock[];
   end: IUnlock[];
   isPlaying: boolean;
+  pointSize?: number | null;
+  endSize?: number | null;
 }
 
 export const getUserUnlocks = (userId: string) => {

@@ -34,6 +34,14 @@ export class StoryDto {
   @IsOptional()
   @IsNumber()
   passageSize?: number;
+
+  @IsOptional()
+  @IsNumber()
+  pointSize?: number;
+
+  @IsOptional()
+  @IsNumber()
+  endSize?: number;
 }
 
 export class RejectDto {
