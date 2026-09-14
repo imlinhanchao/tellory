@@ -722,6 +722,8 @@ export function checkStorySyntax(story: StoryData): StorySyntaxIssue[] {
     }
 
     for (const leftover of findLeftoverMacros(content, ignoredRanges)) {
+      if (leftover.name == "http") continue;
+      if (leftover.name == "https") continue;
       issues.push({
         type: "leftover-macro",
         passage: passage.name,
