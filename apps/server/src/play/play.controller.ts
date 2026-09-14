@@ -56,6 +56,14 @@ export class PlayController {
     const story = await this.storiesService.findOne(id);
     if (!story) throw new Error('故事不存在');
 
+    const lastPlay = await this.playService.findLatestByStoryId(id, userId);
+    if (lastPlay?.isEnding === false) {
+      return {
+        html: lastPlay.html,
+        history: lastPlay.history || [],
+      };
+    }
+
     const runtime = this.storyRuntimeService.start(story.id, story.content);
     const payload = {
       storyId: id,

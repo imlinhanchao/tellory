@@ -326,6 +326,29 @@ export function applyStoryAction(
   ctx: StoryEngineContext,
 ): void {
   const normalized = action.trim();
+  // Support multiple parenthesized actions concatenated together, e.g.
+  // `(set:$a to 1)(set:$b to 2)(goto:"X")`.
+  // If multiple top-level parenthesized blocks exist, apply them in sequence.
+  let cursor = 0;
+  while (cursor < normalized.length && /\s/.test(normalized[cursor]))
+    cursor += 1;
+  if (cursor < normalized.length && normalized[cursor] === "(") {
+    while (cursor < normalized.length) {
+      while (cursor < normalized.length && /\s/.test(normalized[cursor]))
+        cursor += 1;
+      if (cursor >= normalized.length) break;
+      if (normalized[cursor] === "(") {
+        const parsed = readBalancedBlock(normalized, cursor, "(", ")");
+        if (!parsed) break;
+        applyStoryAction(parsed.content, variables, ctx);
+        cursor = parsed.endIndex;
+        continue;
+      }
+      break;
+    }
+    return;
+  }
+
   const cleaned = normalized.replace(/^\(+|\)+$/g, "").trim();
 
   function executeCall(name: string, argsRaw?: string): unknown {
@@ -365,6 +388,39 @@ export function applyStoryAction(
       queuePointMarker(variables, marker);
     }
     return;
+  }
+}
+
+/**
+ * Applies multiple actions from a raw action block string by extracting
+ * balanced parenthesized actions and executing them in order. If the string
+ * contains a single non-parenthesized action, it delegates to
+ * `applyStoryAction`.
+ */
+export function applyStoryActions(
+  actionBlock: string,
+  variables: VariableMap,
+  ctx: StoryEngineContext,
+): void {
+  const raw = actionBlock.trim();
+  if (!raw) return;
+  let cursor = 0;
+  let any = false;
+  while (cursor < raw.length) {
+    while (cursor < raw.length && /\s/.test(raw[cursor])) cursor += 1;
+    if (cursor >= raw.length) break;
+    if (raw[cursor] === "(") {
+      const parsed = readBalancedBlock(raw, cursor, "(", ")");
+      if (!parsed) break;
+      applyStoryAction(parsed.content, variables, ctx);
+      cursor = parsed.endIndex;
+      any = true;
+      continue;
+    }
+    break;
+  }
+  if (!any) {
+    applyStoryAction(raw, variables, ctx);
   }
 }
 
@@ -1260,13 +1316,10 @@ export function replaceTextWithHtml(
       actionBlock: string,
     ) => {
       const label = literalLabel || rawLabel || "继续";
-      const target = extractGotoTarget(actionBlock);
-      const actionMatch = (actionBlock || "").match(
-        /(?:set:\s*[^)\]]+|call:\s*[^)\]]+|point:\s*[^)\]]+)/i,
-      );
-      const displayMatch = (actionBlock || "").match(
-        /display:\s*["']([^"']+)["']/i,
-      );
+      const actionRaw = (actionBlock || "").trim();
+      const target = extractGotoTarget(actionRaw);
+      const displayMatch = actionRaw.match(/display:\s*["']([^"']+)["']/i);
+      const hasAction = /(?:set:|call:|point:|goto:)/i.test(actionRaw);
       if (displayMatch?.[1] && ctx.displayPassages?.[displayMatch[1]]) {
         const displayed = story.passages.find(
           (passage) => passage.name === displayMatch[1],
@@ -1280,7 +1333,7 @@ export function replaceTextWithHtml(
       return buildStoryLink(
         label,
         displayMatch?.[1] ? undefined : target,
-        actionMatch ? actionMatch[0] : undefined,
+        hasAction ? actionRaw : undefined,
         ctx,
         displayMatch?.[1],
       );
@@ -1288,11 +1341,20 @@ export function replaceTextWithHtml(
   );
 
   working = working.replace(
-    /\[\[([^\]|]+)(?:\|([^\]]+))?\]\](?:\(((?:set:\s*[^)]+|call:\s*[^)]+|point:\s*[^)]+))\))?/g,
+    /\[\[([^\]|]+)(?:\|([^\]]+))?\]\](?:\(([^)]+)\))?/g,
     (_all, label: string, target?: string, action?: string) => {
       const passageName = label.trim();
       const actualTarget = (target ?? label).trim();
-      return buildStoryLink(passageName, actualTarget, action, ctx);
+      const actionRaw = action?.trim() ?? undefined;
+      const hasAction = actionRaw
+        ? /(?:set:|call:|point:|goto:)/i.test(actionRaw)
+        : false;
+      return buildStoryLink(
+        passageName,
+        actualTarget,
+        hasAction ? actionRaw : undefined,
+        ctx,
+      );
     },
   );
 
