@@ -28,6 +28,10 @@ export class StoryDto {
   startPassage?: string;
 
   @IsOptional()
+  @IsString()
+  shortname?: string;
+
+  @IsOptional()
   @IsNumber()
   passageSize?: number;
 }

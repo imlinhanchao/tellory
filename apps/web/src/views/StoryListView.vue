@@ -221,7 +221,7 @@
             <button
               v-if="!isCurrentUser"
               class="btn btn-primary btn-xs gap-1"
-              @click="previewStory(s.id!)"
+              @click="previewStory(s.shortname || s.id!)"
               title="阅读故事"
             >
               <Icon icon="mdi:play" class="w-3.5 h-3.5" />
@@ -230,7 +230,7 @@
             <button
               v-else
               class="btn btn-primary btn-xs gap-1"
-              @click="previewStory(s.id!)"
+              @click="previewStory(s.shortname || s.id!)"
               title="试读故事"
             >
               <Icon icon="mdi:play" class="w-3.5 h-3.5" />

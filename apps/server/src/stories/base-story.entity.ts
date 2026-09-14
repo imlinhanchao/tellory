@@ -4,6 +4,9 @@ export abstract class BaseStoryFields {
   @Column({ comment: '标题' })
   title: string;
 
+  @Column({ comment: '短名', nullable: true, unique: true })
+  shortname?: string;
+
   @Column({ comment: '简介', nullable: true })
   description?: string;
 

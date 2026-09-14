@@ -7,6 +7,8 @@ export interface StoryPayload {
   startPassage?: string;
   passageSize?: number;
   description?: string;
+  /** 传 null/空串表示清除短名 */
+  shortname?: string | null;
   tags?: string[];
 }
 
@@ -16,6 +18,7 @@ export interface IStory extends StoryData {
   startPassage: string;
   passageSize?: number;
   description?: string;
+  shortname?: string | null;
   tags?: string[];
   authorId?: string;
   author?: User;

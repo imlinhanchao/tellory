@@ -230,7 +230,7 @@
 
           <div class="flex flex-wrap items-center gap-2">
             <div
-              class="flex-1 min-w-70 flex items-center gap-1.5 bg-base-100 rounded-lg px-2 border border-base-300 focus-within:border-primary focus-within:ring-1 focus-within:ring-primary transition"
+              class="flex-1 min-w-70 input input-sm"
             >
               <Icon
                 icon="mdi:text-box-outline"
@@ -239,12 +239,30 @@
               <input
                 v-model="story.description"
                 :readonly="props.readOnly"
-                class="input input-sm border-none focus:outline-none w-full px-1"
+                class="w-full px-1"
                 placeholder="故事描述/简述..."
               />
             </div>
+            <div class="w-full md:w-48 input input-sm">
+              <Icon
+                icon="mdi:link-variant"
+                class="text-base text-base-content/50 shrink-0"
+              />
+              <input
+                v-model="storyShortname"
+                :readonly="props.readOnly"
+                class="w-full px-1"
+                :class="{ 'text-error': shortnameInvalid }"
+                :title="
+                  shortnameInvalid
+                    ? '短名只能包含字母、数字、下划线和连字符'
+                    : '短名（可选）用于 /play/短名 访问'
+                "
+                placeholder="短名（可选，用于短链接）"
+              />
+            </div>
             <div
-              class="w-full sm:w-72 flex items-center gap-1.5 bg-base-100 rounded-lg px-2 border border-base-300 focus-within:border-primary focus-within:ring-1 focus-within:ring-primary transition"
+              class="w-full sm:w-72 input input-sm"
             >
               <Icon
                 icon="mdi:tag-multiple-outline"
@@ -253,14 +271,16 @@
               <input
                 v-model="storyTagsStr"
                 :readonly="props.readOnly"
-                class="input input-sm border-none focus:outline-none w-full px-1"
+                class="w-full px-1"
                 placeholder="故事标签（逗号分隔，如: 奇幻, 动作）"
               />
             </div>
             <div class="w-44 sm:w-48 flex items-center gap-2">
               <Icon
                 icon="mdi:map-marker"
-                class="text-base text-base-content/50 shrink-0"
+                class="text-base text-base-content/50 shrink-0 tooltip"
+                data-tip="起始章节"
+                aria-label="起始章节"
               />
               <select
                 v-model="story.startPassage"
@@ -626,6 +646,19 @@ const storyTagsStr = computed({
       .filter(Boolean);
   },
 });
+
+/** 短名只允许字母/数字/下划线/连字符，与后端校验保持一致 */
+const SHORTNAME_PATTERN = /^[A-Za-z0-9_-]+$/;
+const storyShortname = computed({
+  get: () => story.value.shortname || "",
+  set: (v: string) => {
+    const name = (v || "").trim();
+    story.value.shortname = name || undefined;
+  },
+});
+const shortnameInvalid = computed(
+  () => !!storyShortname.value && !SHORTNAME_PATTERN.test(storyShortname.value),
+);
 const activeRightTab = ref<"preview" | "vars" | "points" | "endings">(
   "preview",
 );
@@ -1055,6 +1088,10 @@ const confirmSyntaxSave = async () => {
 /** 真正执行服务端保存，失败时回退到本地草稿。 */
 const performSave = async () => {
   if (saveInProgress.value) {
+    return;
+  }
+  if (shortnameInvalid.value) {
+    msg.error("短名只能包含字母、数字、下划线和连字符");
     return;
   }
   saveInProgress.value = true;

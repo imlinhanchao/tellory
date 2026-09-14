@@ -11,6 +11,7 @@ type PublicStory = {
   id: string;
   title?: string;
   description?: string;
+  shortname?: string | null;
   content?: string;
   passageSize?: number;
   tags?: string[];
@@ -80,6 +81,9 @@ export class StoriesService {
 
   async create(dto: StoryDto): Promise<Story> {
     const story = new Story(dto);
+    // 空串必须落为 NULL，否则多个空串会撞上 unique 索引
+    story.shortname = this.normalizeShortname(dto.shortname);
+    await this.assertShortnameAvailable(story.shortname);
     return this.storiesRepo.save(story);
   }
 
@@ -129,6 +133,7 @@ export class StoriesService {
           id: r.sourceStoryId,
           title: r.title,
           description: r.description,
+          shortname: r.shortname,
           content: r.content,
           passageSize: r.passageSize || 0,
           tags,
@@ -176,8 +181,8 @@ export class StoriesService {
       : null;
   }
 
-  async findApprovedOne(id: string) {
-    const story = await this.findById(id, true);
+  async findApprovedOne(idOrName: string) {
+    const story = await this.findById(idOrName, true);
     const author = story
       ? await this.usersService.findById(story.authorId)
       : null;
@@ -191,14 +196,25 @@ export class StoriesService {
   }
 
   async findById(
-    id: string,
+    idOrName: string,
     isPublicRequest: true,
   ): Promise<ApprovedStory | null>;
-  async findById(id: string, isPublicRequest: false): Promise<Story | null>;
-  async findById(id: string, isPublicRequest = false) {
-    return isPublicRequest
-      ? this.approvedRepo.findOne({ where: { sourceStoryId: id } })
-      : this.storiesRepo.findOne({ where: { id } });
+  async findById(
+    idOrName: string,
+    isPublicRequest: false,
+  ): Promise<Story | null>;
+  async findById(idOrName: string, isPublicRequest = false) {
+    const key = idOrName?.trim();
+    if (!key) return null;
+    // 一条查询同时匹配 id 与 shortname（where 数组在 TypeORM 中即 OR）
+    if (isPublicRequest) {
+      return this.approvedRepo.findOne({
+        where: [{ sourceStoryId: key }, { shortname: key }],
+      });
+    }
+    return this.storiesRepo.findOne({
+      where: [{ id: key }, { shortname: key }],
+    });
   }
 
   async update(
@@ -210,11 +226,53 @@ export class StoriesService {
     if (!story) return null;
     if (authorId && story.authorId !== authorId)
       throw new Error('这不是你的故事');
+    await this.assertShortnameAvailable(dto.shortname, story.id);
     Object.assign(story, omit(dto, ['id', 'createdAt', 'authorId']));
     if (dto.tags) story.tags = dto.tags.join(',');
+    if ('shortname' in dto) {
+      story.shortname = this.normalizeShortname(dto.shortname);
+    }
     story.updatedAt = Date.now();
     await this.storiesRepo.update(story.id, story);
     return story;
+  }
+
+  /** 规范化 shortname：去首尾空格、校验字符集；空值统一返回 null */
+  private normalizeShortname(shortname?: string | null): string {
+    const name = shortname?.trim();
+    if (!name) return '';
+    if (!/^[A-Za-z0-9_-]+$/.test(name)) {
+      throw new Error('短名只能包含字母、数字、下划线和连字符');
+    }
+    return name;
+  }
+
+  /** 校验 shortname 未被其他故事占用（空值不校验） */
+  private async assertShortnameAvailable(
+    shortname?: string | null,
+    excludeId?: string,
+  ): Promise<void> {
+    if (!shortname) return;
+    const existing = await this.storiesRepo.findOne({
+      where: { shortname },
+    });
+    if (existing && existing.id !== excludeId) {
+      throw new Error('该短名已被占用');
+    }
+  }
+
+  /** 校验 shortname 未被其它故事的已上架快照占用（历史快照可能残留旧短名） */
+  private async assertApprovedShortnameAvailable(
+    shortname?: string | null,
+    sourceStoryId?: string,
+  ): Promise<void> {
+    if (!shortname) return;
+    const existing = await this.approvedRepo.findOne({
+      where: { shortname },
+    });
+    if (existing && existing.sourceStoryId !== sourceStoryId) {
+      throw new Error('该短名已被其它已上架故事占用，请先修改后再上架');
+    }
   }
 
   async remove(id: string): Promise<boolean> {
@@ -239,6 +297,7 @@ export class StoriesService {
   async approve(id: string, adminId: string): Promise<ApprovedStory | null> {
     const story = await this.findById(id, false);
     if (!story) return null;
+    await this.assertApprovedShortnameAvailable(story.shortname, story.id);
     // mark published
     story.status = 'published';
     story.approvedAt = Date.now();
@@ -252,6 +311,7 @@ export class StoriesService {
     approved.description = story.description;
     approved.content = story.content;
     approved.passageSize = story.passageSize;
+    approved.shortname = story.shortname;
     approved.tags = story.tags;
     approved.authorId = story.authorId;
     approved.approvedBy = adminId;
@@ -265,6 +325,7 @@ export class StoriesService {
       existing.description = approved.description;
       existing.content = approved.content;
       existing.passageSize = approved.passageSize;
+      existing.shortname = approved.shortname;
       existing.tags = approved.tags;
       existing.authorId = approved.authorId;
       existing.approvedBy = approved.approvedBy;

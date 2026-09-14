@@ -233,7 +233,7 @@ import { User } from "@/api/auth";
 const route = useRoute();
 const router = useRouter();
 const appStore = useAppStore();
-const storyId = String(route.params.storyId || "");
+const storyId = ref<string>(route.params.storyId.toString() || "");
 
 const story = ref<any>(null);
 const play = ref<any>(null);
@@ -262,9 +262,10 @@ onUnmounted(() => {
 
 async function loadStory() {
   const res = await (route.name == "play" ? getReleaseStory : getStory)(
-    storyId,
+    storyId.value,
   );
   story.value = res as any;
+  storyId.value = story.value?.sourceStoryId || story.value?.id;
   if (story.value?.title) {
     appStore.setCustomHeaderTitle(story.value.title);
     document.title = story.value.title + " | 织言 - Tellory";
@@ -274,7 +275,7 @@ async function loadStory() {
 const readers = ref<User[]>([]);
 async function loadReaders() {
   try {
-    const res = await getReaders(storyId);
+    const res = await getReaders(storyId.value);
     readers.value = res;
   } catch (err) {
     console.error("[PlayView] loadReaders failed", err);
@@ -283,7 +284,7 @@ async function loadReaders() {
 
 async function loadExistingPlay() {
   try {
-    const p = await getPlay(storyId);
+    const p = await getPlay(storyId.value);
     play.value = p;
     currentHtml.value = p.html || "";
     return true;
@@ -295,7 +296,7 @@ async function loadExistingPlay() {
 
 async function startPlay() {
   try {
-    const res = await createPlay(storyId, {
+    const res = await createPlay(storyId.value, {
       currentPassage: story.value?.startPassage,
     });
     play.value = res as any;
@@ -308,7 +309,7 @@ async function startPlay() {
 
 async function confirmRestart() {
   showRestartConfirm.value = false;
-  const res = await resetPlay(storyId);
+  const res = await resetPlay(storyId.value);
   play.value = res as any;
   currentHtml.value = res.html || "";
 }
@@ -345,7 +346,7 @@ async function onContentClick(e: MouseEvent) {
       await startPlay();
     }
 
-    const res = await updatePlay(storyId, { target, action, display });
+    const res = await updatePlay(storyId.value, { target, action, display });
     play.value = res as any;
     if (res.html) {
       currentHtml.value = res.html;
