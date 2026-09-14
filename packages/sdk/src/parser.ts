@@ -234,6 +234,7 @@ export type StorySyntaxIssueType =
   | "invalid-ending"
   | "leftover-macro"
   | "duplicate-passage"
+  | "missing-ending"
   | "inconsistent-point-description"
   | "inconsistent-ending-description";
 
@@ -692,11 +693,23 @@ export function checkStorySyntax(story: StoryData): StorySyntaxIssue[] {
   const pointDescriptions = new Map<string, MarkerOccurrence[]>();
   const endDescriptions = new Map<string, MarkerOccurrence[]>();
 
+  // Passages that are referenced via (display:"Target") from anywhere.
+  const displayedTargets = new Set<string>();
+  for (const p of story.passages) {
+    for (const m of p.content.matchAll(
+      /\(display:\s*["']([^"']+)["']\s*\)/gi,
+    )) {
+      const t = (m[1] || "").trim();
+      if (t) displayedTargets.add(t);
+    }
+  }
+
   for (const passage of story.passages) {
     const content = passage.content ?? "";
     const ignoredRanges = collectIgnoredRanges(content);
 
-    for (const reference of collectLinkReferences(content)) {
+    const outgoing = collectLinkReferences(content);
+    for (const reference of outgoing) {
       referenced.add(reference.target);
       if (!passageNames.has(reference.target)) {
         issues.push({
@@ -749,6 +762,23 @@ export function checkStorySyntax(story: StoryData): StorySyntaxIssue[] {
           message: "(end:) 缺少结局名称",
         });
       }
+    }
+
+    // If a passage contains no outgoing links/goto/wiki references
+    // and also doesn't contain any (end:) blocks, it's a terminal scene
+    // that hasn't been explicitly marked as an ending. However, if the
+    // passage is referenced via (display:) from elsewhere, it's allowed
+    // to be unmarked as an ending.
+    if (
+      outgoing.length === 0 &&
+      endBlocks.length === 0 &&
+      !displayedTargets.has(passage.name)
+    ) {
+      issues.push({
+        type: "missing-ending",
+        passage: passage.name,
+        message: `段落「${passage.name}」没有任何出口且未标记为结局，请添加 (end:) 标记或添加出口。`,
+      });
     }
 
     for (const block of collectRawMacroBlocks(

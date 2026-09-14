@@ -78,12 +78,14 @@
                 <span class="font-bold text-primary">{{ getCombinedProgress(p).percent || 0 }}%</span>
               </div>
               <progress
+                v-if="(p.points || []).length > 0 || (p.end || []).length > 0"
                 class="progress progress-primary w-full h-2 bg-base-200"
                 :value="getCombinedProgress(p).percent || 0"
                 max="100"
               ></progress>
               <div class="flex gap-2">
                 <button
+                  v-if="(p.points || []).length > 0"
                   class="badge badge-soft badge-xs badge-warning p-3 cursor-pointer rounded-lg flex-1"
                   @click="openUnlockModal(p, 'points')"
                 >
@@ -91,6 +93,7 @@
                   成就 {{ (p.points || []).length }} / {{ p.pointSize || 0 }}
                 </button>
                 <button
+                  v-if="(p.end || []).length > 0"
                   class="badge badge-soft badge-xs badge-success p-3 cursor-pointer rounded-lg flex-1"
                   @click="openUnlockModal(p, 'endings')"
                 >
@@ -184,14 +187,14 @@
 
         <div class="tabs tabs-boxed bg-base-200/50 p-1 mb-4">
           <a
-            v-if="unlockModalData.pointSize != null"
+            v-if="unlockModalData.pointSize != null && unlockModalData.pointSize > 0"
             :class="['tab flex-1', unlockActiveTab === 'points' ? 'tab-active bg-base-100 shadow-sm' : '']"
             @click.prevent="unlockActiveTab = 'points'"
           >
             成就 {{ (unlockModalData.points || []).length }} / {{ unlockModalData.pointSize }}
           </a>
           <a
-            v-if="unlockModalData.endSize != null"
+            v-if="unlockModalData.endSize != null && unlockModalData.endSize > 0"
             :class="['tab flex-1', unlockActiveTab === 'endings' ? 'tab-active bg-base-100 shadow-sm' : '']"
             @click.prevent="unlockActiveTab = 'endings'"
           >

@@ -191,16 +191,16 @@
                   <Icon icon="mdi:graph-outline" size="16px" />
                 </button>
               </div>
+              <div v-if="currentStoryId" class="tooltip tooltip-bottom" data-tip="试玩故事">
+                <button
+                  class="btn btn-sm btn-ghost btn-secondary btn-circle"
+                  type="button"
+                  @click="$router.push(`/test/${currentStoryId}`)"
+                >
+                  <Icon icon="mdi:play-circle-outline" size="16px" />
+                </button>
+              </div>
               <template v-if="!props.readOnly">
-                <div v-if="currentStoryId" class="tooltip tooltip-bottom" data-tip="试玩故事">
-                  <button
-                    class="btn btn-sm btn-ghost btn-secondary btn-circle"
-                    type="button"
-                    @click="$router.push(`/test/${currentStoryId}`)"
-                  >
-                    <Icon icon="mdi:play-circle-outline" size="16px" />
-                  </button>
-                </div>
                 <div class="tooltip tooltip-bottom" data-tip="保存至服务器">
                   <button
                     class="btn btn-sm btn-primary btn-ghost btn-circle"
@@ -225,6 +225,15 @@
                   </button>
                 </div>
               </template>
+              <div v-else class="tooltip tooltip-bottom" data-tip="语法检查">
+                <button
+                  class="btn btn-sm btn-ghost btn-circle"
+                  type="button"
+                  @click="saveToServer"
+                >
+                  <Icon icon="mdi:check-decagram-outline" size="16px" />
+                </button>
+              </div>
             </div>
           </div>
 
@@ -419,7 +428,11 @@
       <div class="modal-box max-w-2xl">
         <h3 class="flex items-center gap-2 text-lg font-bold">
           <Icon
-            icon="mdi:check-decagram-outline"
+            :icon="
+              syntaxIssues.length
+                ? 'mdi:check-decagram-outline'
+                : 'mdi:check-circle-outline'
+            "
             class="text-xl text-primary"
           />
           语法检查
@@ -435,14 +448,25 @@
 
         <template v-else>
           <div class="space-y-3 py-4">
-            <div role="alert" class="alert alert-warning alert-soft">
-              <Icon icon="mdi:alert-circle-outline" class="text-lg" />
-              <span
-                >发现
-                {{ syntaxIssues.length }} 个语法问题，是否仍要继续保存？</span
-              >
+            <div
+              role="alert"
+              class="alert alert-soft"
+              :class="syntaxIssues.length ? 'alert-warning' : 'alert-success'"
+            >
+              <Icon
+                :icon="
+                  syntaxIssues.length
+                    ? 'mdi:alert-circle-outline'
+                    : 'mdi:check-circle-outline'
+                "
+                class="text-lg"
+              />
+              <span v-if="syntaxIssues.length">
+                发现 {{ syntaxIssues.length }} 个语法问题，是否仍要继续保存？
+              </span>
+              <span v-else> 故事语法检查通过，没有发现问题。 </span>
             </div>
-            <ul class="max-h-80 space-y-2 overflow-y-auto pr-1">
+            <ul v-if="syntaxIssues.length" class="max-h-80 space-y-2 overflow-y-auto pr-1">
               <li
                 v-for="(issue, index) in syntaxIssues"
                 :key="index"
@@ -463,9 +487,10 @@
           </div>
           <div class="modal-action">
             <button class="btn" type="button" @click="cancelSyntaxSave">
-              取消
+              {{ syntaxIssues.length && !props.readOnly ? "取消" : "关闭" }}
             </button>
             <button
+              v-if="syntaxIssues.length && !props.readOnly"
               class="btn btn-warning"
               type="button"
               @click="confirmSyntaxSave"
@@ -615,7 +640,7 @@ const syntaxIssues = ref<StorySyntaxIssue[]>([]);
 const saveInProgress = ref(false);
 
 /** 语法问题类型 -> 中文标签 */
-const SYNTAX_ISSUE_LABELS: Record<StorySyntaxIssue["type"], string> = {
+const SYNTAX_ISSUE_LABELS: Record<string, string> = {
   "dead-link": "死链",
   "orphan-passage": "孤立段落",
   "invalid-ending": "结局标记",
@@ -623,6 +648,7 @@ const SYNTAX_ISSUE_LABELS: Record<StorySyntaxIssue["type"], string> = {
   "duplicate-passage": "重复段落名",
   "inconsistent-point-description": "成就描述不一致",
   "inconsistent-ending-description": "结局描述不一致",
+  "missing-ending": "缺少结局标记",
 };
 
 const syntaxIssueLabel = (type: StorySyntaxIssue["type"]): string =>
@@ -1056,7 +1082,11 @@ const saveToServer = async () => {
 
   if (!issues.length) {
     closeSyntaxDialog();
-    await performSave();
+    if (props.readOnly) {
+      msg.success("语法检查通过");
+    } else {
+      await performSave();
+    }
   }
 };
 
