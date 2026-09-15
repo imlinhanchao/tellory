@@ -197,7 +197,7 @@
             <button
               v-if="s.authorId == getUser?.id && isCurrentUser"
               class="btn btn-ghost btn-xs btn-square hover:bg-base-300/50"
-              @click="editStory(s.id!)"
+              @click="editStory(storyRouteKey(s))"
               title="编辑故事"
             >
               <Icon
@@ -208,7 +208,7 @@
             <button
               v-if="!isCurrentUser"
               class="btn btn-primary btn-xs gap-1"
-              @click="previewStory(s.shortname || s.id!)"
+              @click="previewStory(storyRouteKey(s))"
               title="阅读故事"
             >
               <Icon icon="mdi:play" class="w-3.5 h-3.5" />
@@ -217,7 +217,7 @@
             <button
               v-else
               class="btn btn-primary btn-xs gap-1"
-              @click="previewStory(s.shortname || s.id!)"
+              @click="previewStory(storyRouteKey(s))"
               title="试读故事"
             >
               <Icon icon="mdi:play" class="w-3.5 h-3.5" />
@@ -281,6 +281,7 @@ import { listStories, unpublishStory, republishStory } from "@/api/stories";
 import { ref, onMounted, watch, reactive, computed } from "vue";
 import { useRoute } from "vue-router";
 import { Icon } from "@iconify/vue";
+import { storyRouteKey } from "@/lib/storyRoute";
 
 const router = useRouter();
 const route = useRoute();
@@ -339,10 +340,12 @@ const createNew = () => {
 };
 
 const editStory = (id: string) => {
+  if (!id) return;
   router.push({ name: "story-editor", params: { storyId: id } });
 };
 
 const previewStory = (id: string) => {
+  if (!id) return;
   router.push({
     name: isCurrentUser.value ? "test" : "play",
     params: { storyId: id },

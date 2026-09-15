@@ -68,7 +68,7 @@
             <div class="flex justify-between items-start">
               <h4 class="font-bold text-lg truncate flex items-center gap-2">
                 {{ p.title }}
-                <button class="btn btn-ghost btn-xs" @click="previewStory(p.storyId!, p.status)">
+                <button class="btn btn-ghost btn-xs" @click="previewStory(progressRouteKey(p), p.status)">
                   <Icon icon="mdi:book-open-variant" />
                 </button>
               </h4>
@@ -128,7 +128,7 @@
                 <div class="flex items-start justify-between gap-2">
                   <h4 class="font-bold text-lg truncate flex items-center gap-2">
                 {{ s.title }}
-                <button class="btn btn-ghost btn-xs" @click="previewStory(s.id!, s.status)">
+                <button class="btn btn-ghost btn-xs" @click="previewStory(storyRouteKey(s), s.status)">
                   <Icon icon="mdi:book-open-variant" />
                 </button>
               </h4>
@@ -153,13 +153,13 @@
                   <button
                     v-if="isCurrentUser"
                     class="btn btn-ghost btn-xs"
-                    @click="editStory(s.id!)"
+                    @click="editStory(storyRouteKey(s))"
                   >
                     编辑
                   </button>
                   <button
                     class="btn btn-primary btn-xs rounded-full px-4"
-                    @click="previewStory(s.id!, s.status)"
+                    @click="previewStory(storyRouteKey(s), s.status)"
                   >
                     阅读
                   </button>
@@ -252,6 +252,7 @@ import md5 from "crypto-js/md5";
 import { useRoute, useRouter } from "vue-router";
 import { listStories, type IStory } from "@/api/stories";
 import { getUserUnlocks, type IUserStoryProgress } from "@/api/play";
+import { storyRouteKey } from "@/lib/storyRoute";
 import { useAuthStore } from "@/stores/modules/auth";
 import { Icon } from "@iconify/vue";
 import request from "@/utils/http";
@@ -361,12 +362,21 @@ async function resendVerification() {
 }
 
 const previewStory = (id: string, status?: string) => {
+  if (!id) return;
   router.push({
     name: status == "published" ? "play" : "test",
     params: { storyId: id },
   });
 };
+
+/**
+ * 阅读记录里的故事标识：有 shortname 用 shortname，否则用 storyId。
+ * 注意不能用记录自身的 id——已上架故事的 id 是快照主键，路由解析不到。
+ */
+const progressRouteKey = (p: IUserStoryProgress) =>
+  storyRouteKey({ shortname: p.shortname, id: p.storyId });
 const editStory = (id: string) => {
+  if (!id) return;
   router.push({ name: "story-editor", params: { storyId: id } });
 };
 

@@ -32,6 +32,7 @@ export interface IUnlock {
 export interface IUserStoryProgress {
   id: string;
   storyId: string;
+  shortname?: string | null;
   status: string;
   title: string;
   description: string;

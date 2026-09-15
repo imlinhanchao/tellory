@@ -195,7 +195,7 @@
                 <button
                   class="btn btn-sm btn-ghost btn-secondary btn-circle"
                   type="button"
-                  @click="$router.push(`/test/${currentStoryId}`)"
+                  @click="$router.push(`/test/${testRouteKey}`)"
                 >
                   <Icon icon="mdi:play-circle-outline" size="16px" />
                 </button>
@@ -601,6 +601,7 @@ import {
   buildStandaloneExport,
 } from "@/lib/storyEngine";
 import {} from "@/lib/storyEngine";
+import { storyRouteKey } from "@/lib/storyRoute";
 
 // CodeMirror v5 for JSON editing
 // CodeMirror v5 for JSON editing (used for modals/paste editor)
@@ -692,6 +693,20 @@ const storyShortname = computed({
 });
 const shortnameInvalid = computed(
   () => !!storyShortname.value && !SHORTNAME_PATTERN.test(storyShortname.value),
+);
+
+/**
+ * 服务器上已落库的短名。试玩链接必须用它，否则用户刚输入短名还没保存时，
+ * 链接会因为服务端查不到而失效。
+ */
+const persistedShortname = ref<string | null>(null);
+
+/** /test/:storyId 用的标识：有已保存短名用短名，否则用真实 id。 */
+const testRouteKey = computed(() =>
+  storyRouteKey({
+    id: currentStoryId.value,
+    shortname: persistedShortname.value,
+  }),
 );
 const activeRightTab = ref<"preview" | "vars" | "points" | "endings">(
   "preview",
@@ -1191,6 +1206,8 @@ const performSave = async () => {
       story.value.status = 'draft';
       msg.success("已保存");
     }
+    // 保存成功后短名才算落库，试玩链接此时才能安全使用它
+    persistedShortname.value = story.value.shortname || null;
     localStorage.removeItem("haide-story-draft");
   } catch (e) {
     // fallback to local save
@@ -1331,6 +1348,7 @@ onMounted(() => {
     try {
       const data = props.initialStory;
       currentStoryId.value = data.id;
+      persistedShortname.value = data.shortname ?? null;
       data.tags = data.tags?.split ? data.tags.split(",") : data.tags;
       story.value = data as any;
       story.value.passages = normalizePassageTags(
@@ -1372,6 +1390,9 @@ function init() {
     getStory(sid)
       .then((data) => {
         if (data) {
+          // 路由参数可能是 shortname，拿到真实 id 后归一化，后续保存/编辑都走 id
+          currentStoryId.value = data.id || sid;
+          persistedShortname.value = data.shortname ?? null;
           data.tags = data.tags?.split ? data.tags.split(",") : data.tags;
           story.value = data;
           story.value.passages = normalizePassageTags(
