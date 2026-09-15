@@ -68,16 +68,15 @@
           <div class="flex items-center gap-2 flex-wrap">
             <div class="text-xs text-base-content/50">正在阅读</div>
             <div class="avatar-group -space-x-6">
-              <router-link
-                class="avatar"
+              <Avatar
                 v-for="reader in readers.slice(0, 5)"
                 :key="reader.id"
-                :to="reader.from ? `/${reader.from}/${reader.username}` : `/${reader.username}`"
-              >
-                <InlineTooltip class="w-5" :text="reader.nickname || reader.username">
-                  <img :src="reader.avatar" />
-                </InlineTooltip>
-              </router-link>
+                :user="reader"
+                tip
+                link
+                size="28"
+                shrink
+              />
             </div>
             <span
               v-if="readers.length > 5"
@@ -125,21 +124,15 @@
           <div class="flex items-center gap-2 flex-wrap">
             <div class="text-xs text-base-content/50">正在阅读</div>
             <div class="avatar-group -space-x-2">
-              <router-link
-                class="avatar border"
+              <Avatar
                 v-for="reader in readers.slice(0, 5)"
                 :key="reader.id"
-                :to="reader.from ? `/${reader.from}/${reader.username}` : `/${reader.username}`"
-              >
-                <InlineTooltip
-                  class="w-5"
-                  :text="reader.nickname || reader.username"
-                >
-                  <img
-                    :src="reader.avatar"
-                  />
-                </InlineTooltip>
-              </router-link>
+                :user="reader"
+                tip
+                link
+                size="24"
+                shrink
+              />
             </div>
             <span
               v-if="readers.length > 5"

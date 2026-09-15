@@ -23,4 +23,9 @@ export class UsersController {
   ) {
     return this.usersService.findOne(username, from);
   }
+
+  @Get(':username')
+  async getUserInfo(@Param('username') username: string) {
+    return this.usersService.findOne(username, '');
+  }
 }

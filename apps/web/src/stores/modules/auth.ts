@@ -12,6 +12,7 @@ export const useAuthStore = defineStore("auth", () => {
 
   const isAuthenticated = computed(() => !!token.value);
   const isAdmin = computed(() => user.value?.isAdmin || false);
+  const isVerified = computed(() => user.value?.isVerified || false);
 
   const getToken = computed(() => token.value);
   const getUser = computed(() => user.value);
@@ -64,6 +65,7 @@ export const useAuthStore = defineStore("auth", () => {
   return {
     isAuthenticated,
     isAdmin,
+    isVerified,
     isConfigured,
     getToken,
     getUser,

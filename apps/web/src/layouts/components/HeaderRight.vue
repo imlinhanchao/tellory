@@ -9,15 +9,26 @@
       v-if="!isMobile || !isAuthenticated"
       class="flex items-center gap-1.5 sm:gap-2"
     >
-      <router-link
-        v-if="isAuthenticated"
-        to="/story-editor"
-        class="btn btn-primary btn-xs sm:btn-sm gap-1 font-medium shadow-xs"
-        title="创建故事"
-      >
-        <Icon icon="mdi:plus" class="w-4 h-4" />
-        <span class="hidden sm:inline">创作故事</span>
-      </router-link>
+      <template v-if="isAuthenticated">
+        <router-link
+          v-if="userInfo && userInfo.isVerified"
+          to="/story-editor"
+          class="btn btn-primary btn-xs sm:btn-sm gap-1 font-medium shadow-xs"
+          title="创建故事"
+        >
+          <Icon icon="mdi:plus" class="w-4 h-4" />
+          <span class="hidden sm:inline">创作故事</span>
+        </router-link>
+        <button
+          v-else
+          class="btn btn-primary btn-xs sm:btn-sm gap-1 font-medium shadow-xs opacity-60 cursor-not-allowed tooltip tooltip-bottom"
+          data-tip="账号未激活，请前往个人主页激活"
+          @click.prevent="router.push(profileUrl)"
+        >
+          <Icon icon="mdi:plus" class="w-4 h-4" />
+          <span class="hidden sm:inline">创作故事</span>
+        </button>
+      </template>
 
       <label
         class="toggle"
@@ -56,20 +67,7 @@
       class="dropdown dropdown-end"
     >
       <label tabindex="0" class="avatar">
-        <div class="w-9 rounded-full">
-          <div
-            v-if="!userInfo.avatar"
-            class="rounded-full bg-primary/15 text-primary flex items-center justify-center text-sm font-bold border border-primary/20"
-          >
-            {{ (userInfo.nickname || userInfo.username || "U").slice(0, 1) }}
-          </div>
-          <img
-            v-else
-            :src="userInfo.avatar"
-            alt="avatar"
-            class="rounded-full object-cover"
-          />
-        </div>
+        <Avatar :user="userInfo" size="36" />
       </label>
       <ul
         tabindex="0"
@@ -77,10 +75,18 @@
       >
         <!-- 仅移动端展示：创作故事 + 主题切换 -->
         <li class="md:hidden">
-          <router-link to="/story-editor">
-            <Icon icon="mdi:plus" class="w-4 h-4" />
-            创作故事
-          </router-link>
+          <template v-if="userInfo && userInfo.isVerified">
+            <router-link to="/story-editor">
+              <Icon icon="mdi:plus" class="w-4 h-4" />
+              创作故事
+            </router-link>
+          </template>
+          <template v-else>
+            <a @click.prevent="router.push(profileUrl)" class="opacity-60 cursor-not-allowed tooltip tooltip-end" data-tip="账号未激活，请前往个人主页激活">
+              <Icon icon="mdi:plus" class="w-4 h-4" />
+              创作故事
+            </a>
+          </template>
         </li>
         <li class="md:hidden">
           <a @click.prevent="appStore.toggleTheme()">

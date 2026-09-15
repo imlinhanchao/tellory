@@ -52,6 +52,25 @@ export class AuthController {
     return await this.authService.register(body);
   }
 
+  @Post('verification')
+  async verification(@Body() body: { token: string }) {
+    if (!body?.token) throw new Error('token 不能为空');
+    return await this.authService.verifyEmail(body.token);
+  }
+
+  @Post('resend-verification')
+  async resendVerification(
+    @Body() body: { email: string },
+    @Request() req: ExpressRequest,
+  ) {
+    if (!body?.email) throw new Error('email 不能为空');
+    const domain = new URL(
+      req.headers.referer || `${req.protocol}://${req.headers.host}`,
+    ).origin;
+
+    return await this.authService.resendVerification(body.email, domain);
+  }
+
   @Post('login')
   async login(@Body() body: ILoginBody) {
     if (!body.username || !body.password) {

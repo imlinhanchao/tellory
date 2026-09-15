@@ -30,6 +30,7 @@ export interface User {
   email?: string;
   from?: string;
   avatar?: string;
+  isVerified: boolean;
 }
 
 /**

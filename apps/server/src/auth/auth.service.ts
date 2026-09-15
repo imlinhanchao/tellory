@@ -10,6 +10,7 @@ import { ConfigService } from 'src/config/config.service';
 import path from 'path';
 import fs from 'fs';
 import { omit } from 'src/utils';
+import nodemailer from 'nodemailer';
 
 @Injectable()
 export class AuthService {
@@ -17,10 +18,9 @@ export class AuthService {
     path.join(__dirname, '../../assets/verify_zh.html'),
     'utf-8',
   );
-  logoSvg = fs.readFileSync(
-    path.join(__dirname, '../../assets/logo.svg'),
-    'utf-8',
-  );
+  logoSvg = fs
+    .readFileSync(path.join(__dirname, '../../assets/logo.svg'), 'utf-8')
+    .replaceAll('1em', '40px');
   constructor(
     private usersService: UsersService,
     private jwtService: JwtService,
@@ -34,15 +34,93 @@ export class AuthService {
     const emailUser = await this.usersService.findByEmail(body.email);
     if (emailUser) throw new Error('邮箱已被注册');
 
-    return await this.usersService.save(
-      new User({
-        username: body.username,
-        password: body.password,
-        email: body.email,
-        nickname: body.nickname,
-        from: '',
-      }),
+    const token = crypto.randomBytes(20).toString('hex');
+    const newUser = new User({
+      username: body.username,
+      password: body.password,
+      email: body.email,
+      nickname: body.nickname,
+      from: '',
+    });
+    newUser.verificationToken = token;
+    newUser.isVerified = false;
+
+    const account = await this.usersService.save(newUser);
+    const mailConfig = this.configService.get('mail');
+
+    const domain = process.env.DOMAIN || 'http://localhost:3000';
+    const mailHtml = this.makeVerifyMail({ user: account, token, domain });
+
+    try {
+      const transporter = nodemailer.createTransport({
+        host: mailConfig.host,
+        port: mailConfig.port,
+        secure: mailConfig.secure,
+        auth: {
+          user: mailConfig.user,
+          pass: mailConfig.pass,
+        },
+      });
+
+      await transporter.sendMail({
+        from: mailConfig.from,
+        to: account.email,
+        subject: `[织言·Tellory] 请验证您的电子邮件地址`,
+        html: mailHtml,
+      });
+    } catch (err) {
+      console.error('发送验证邮件失败', err);
+    }
+
+    return account;
+  }
+
+  async verifyEmail(token: string) {
+    if (!token) throw new Error('token 不能为空');
+    const user = await this.usersService.verifyByToken(token);
+    if (!user) throw new Error('验证 Token 无效或已过期');
+    return { success: true };
+  }
+
+  async resendVerification(email: string, domain: string) {
+    if (!email) throw new Error('邮箱不能为空');
+    const user = await this.usersService.findByEmail(email);
+    if (!user) throw new Error('用户不存在');
+    if (user.isVerified) throw new Error('用户已激活');
+
+    const token = crypto.randomBytes(20).toString('hex');
+    const updated = await this.usersService.setVerificationTokenByEmail(
+      email,
+      token,
     );
+    if (!updated) throw new Error('设置验证 Token 失败');
+
+    const mailConfig = this.configService.get('mail');
+    const mailHtml = this.makeVerifyMail({ user: updated, token, domain });
+
+    try {
+      const transporter = nodemailer.createTransport({
+        host: mailConfig.host,
+        port: mailConfig.port,
+        secure: mailConfig.secure,
+        auth: {
+          user: mailConfig.user,
+          pass: mailConfig.pass,
+        },
+      });
+
+      const res = await transporter.sendMail({
+        from: mailConfig.from,
+        to: updated.email,
+        subject: `[织言·Tellory] 请验证您的电子邮件地址`,
+        html: mailHtml,
+      });
+      console.log('发送验证邮件结果', res);
+      return { success: true };
+    } catch (err) {
+      console.error('发送验证邮件失败', err);
+      throw new Error('发送验证邮件失败');
+    }
   }
 
   async login(body: { username: string; password: string }) {
@@ -142,12 +220,12 @@ export class AuthService {
     if (!user.email) throw new Error('用户邮箱不存在');
     const verifyUrl = `${domain}/#/${user.username}/verification/?token=${token}`;
     const mail = this.verifyTemplate
-      .replace('{{domain}}', domain)
-      .replace('{{logo}}', this.logoSvg)
-      .replace('{{nickname}}', user.username)
-      .replace('{{email}}', user.email)
-      .replace('{{verifyUrl}}', verifyUrl)
-      .replace('{{name}}', process.env.NAME || 'Template');
+      .replaceAll('{{domain}}', domain)
+      .replaceAll('{{logo}}', this.logoSvg)
+      .replaceAll('{{nickname}}', user.username)
+      .replaceAll('{{email}}', user.email)
+      .replaceAll('{{verifyUrl}}', verifyUrl)
+      .replaceAll('{{name}}', '织言·Tellory');
     return mail;
   }
 }

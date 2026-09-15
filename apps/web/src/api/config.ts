@@ -20,6 +20,14 @@ export interface ConfigData {
     apiKey: string;
     mirror?: string;
   };
+  mail: {
+    host: string;
+    port: number;
+    secure: boolean;
+    user: string;
+    pass: string;
+    from: string;
+  };
 }
 
 export interface ConfigStatus {

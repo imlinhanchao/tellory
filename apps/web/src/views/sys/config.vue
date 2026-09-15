@@ -139,6 +139,85 @@
           </div>
         </div>
 
+        <!-- 邮件配置 -->
+        <div class="space-y-4 grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div
+            class="divider col-span-2 text-xs font-bold opacity-50 uppercase tracking-wider"
+          >
+            邮件配置（SMTP，可选）
+          </div>
+
+          <div class="form-control w-full">
+            <label class="label px-1">
+              <span class="text-xs font-bold opacity-60 uppercase">SMTP 主机</span>
+            </label>
+            <input
+              v-model="config.mail.host"
+              type="text"
+              placeholder="smtp.example.com"
+              class="input input-bordered w-full"
+            />
+          </div>
+
+          <div class="form-control w-full">
+            <label class="label px-1">
+              <span class="text-xs font-bold opacity-60 uppercase">SMTP 端口</span>
+            </label>
+            <input
+              v-model.number="config.mail.port"
+              type="number"
+              placeholder="587"
+              class="input input-bordered w-full"
+            />
+          </div>
+
+          <div class="form-control w-full">
+            <label class="label px-1">
+              <span class="text-xs font-bold opacity-60 uppercase">加密 (TLS)</span>
+            </label>
+            <label class="cursor-pointer label">
+              <input type="checkbox" v-model="config.mail.secure" class="checkbox" />
+              <span class="label-text ml-2">使用 SSL/TLS (secure)</span>
+            </label>
+          </div>
+
+          <div class="form-control w-full">
+            <label class="label px-1">
+              <span class="text-xs font-bold opacity-60 uppercase">SMTP 用户</span>
+            </label>
+            <input
+              v-model="config.mail.user"
+              type="text"
+              placeholder="smtp user"
+              class="input input-bordered w-full"
+            />
+          </div>
+
+          <div class="form-control w-full">
+            <label class="label px-1">
+              <span class="text-xs font-bold opacity-60 uppercase">SMTP 密码</span>
+            </label>
+            <input
+              v-model="config.mail.pass"
+              type="password"
+              placeholder="smtp pass"
+              class="input input-bordered w-full"
+            />
+          </div>
+
+          <div class="form-control w-full">
+            <label class="label px-1">
+              <span class="text-xs font-bold opacity-60 uppercase">发件邮箱</span>
+            </label>
+            <input
+              v-model="config.mail.from"
+              type="email"
+              placeholder="no-reply@example.com"
+              class="input input-bordered w-full"
+            />
+          </div>
+        </div>
+
         <div class="space-y-4 grid grid-cols-1 md:grid-cols-2 gap-6">
           <div
             class="divider col-span-2 text-xs font-bold opacity-50 uppercase tracking-wider"
@@ -276,6 +355,14 @@ const config = ref<ConfigData>({
   steam: {
     apiKey: "",
     mirror: "",
+  },
+  mail: {
+    host: "",
+    port: 587,
+    secure: false,
+    user: "",
+    pass: "",
+    from: "",
   },
 });
 

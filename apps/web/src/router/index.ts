@@ -24,6 +24,7 @@ const router = createRouter({
           meta: {
             title: "故事编辑器",
             loginRequired: true,
+            verifiedRequired: true,
           },
         },
         {
@@ -74,6 +75,18 @@ const router = createRouter({
           component: () => import("@/views/UserProfileView.vue"),
           meta: { title: "个人主页" },
         },
+        {
+          path: "/:from/:username/verification",
+          name: "user-verification-from",
+          component: () => import("@/views/EmailVerificationView.vue"),
+          meta: { title: "邮箱验证" },
+        },
+        {
+          path: "/:username/verification",
+          name: "user-verification",
+          component: () => import("@/views/EmailVerificationView.vue"),
+          meta: { title: "邮箱验证" },
+        },
       ],
     },
     {
@@ -115,6 +128,9 @@ router.beforeEach((to) => {
   if (to.meta.loginRequired && !authStore.isAuthenticated) {
     localStorage.setItem('redirect', location.href);
     return { path: "/login" };
+  }
+  if (to.meta.verifiedRequired && !authStore.isVerified) {
+    return { path: "/" };
   }
   if (to.meta.adminRequired && !authStore.isAdmin) {
     return { path: "/" };

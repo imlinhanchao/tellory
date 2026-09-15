@@ -39,20 +39,7 @@
       >
         <div class="card-body p-4 space-y-3">
           <div class="flex items-start gap-3">
-            <div class="avatar shrink-0">
-              <div
-                v-if="!s.author?.avatar"
-                class="w-10 h-10 rounded-full bg-primary/15 text-primary flex items-center justify-center text-sm font-bold border border-primary/20"
-              >
-                {{ initials(s) }}
-              </div>
-              <img
-                v-else
-                :src="s.author?.avatar"
-                alt="avatar"
-                class="w-10 h-10 rounded-full object-cover"
-              />
-            </div>
+            <Avatar :user="s.author" tip link size="40" />
             <div class="min-w-0 flex-1">
               <h3
                 class="font-bold text-base text-base-content truncate hover:text-primary transition-colors cursor-pointer"

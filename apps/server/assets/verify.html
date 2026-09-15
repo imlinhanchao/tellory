@@ -21,13 +21,13 @@
       text-align: left;
       line-height: 19px;
       font-size: 14px;
-      background-color: #323232;
+      background-color: #f0f0f0;
       margin: 0;
       padding: 0;
     "
   >
     <center
-      style="width: 100%; background-color: #323232; padding: 20px 0 40px"
+      style="width: 100%; background-color: #f0f0f0; padding: 20px 0 40px"
     >
       <table
         style="
@@ -85,7 +85,12 @@
                       text-decoration: none;
                     "
                   >
-                    <div style="width: 80px; height: 80px">{{logo}}</div>
+                    <div style="text-align: center;display: flex; align-items: center;">
+                      {{logo}}
+                      <span style="color: #4d98ee; font-weight: bold;font-size: 38px;margin-left:5px">
+                        {{name}}
+                      </span>
+                    </div>
                   </a>
                 </div>
               </center>
@@ -130,11 +135,11 @@
                   font-size: 14px;
                   font-weight: normal;
                   max-width: 580px;
-                  color: #8e969f;
+                  color: #333435;
                   line-height: 20px;
                   border-radius: 6px !important;
                   overflow: hidden;
-                  background-color: #000000;
+                  background-color: #fff;
                   padding: 30px;
                 "
               >
@@ -147,7 +152,7 @@
                     line-height: 1.25;
                     font-size: 20px;
                     font-weight: 400 !important;
-                    color: #8e969f;
+                    color: #333435;
                     word-break: normal;
                     text-align: left;
                     padding: 0;
@@ -155,13 +160,13 @@
                   align="left"
                 >
                   Hi,
-                  <strong style="color: #ffffff !important">{{nickname}}</strong
+                  <strong style="color: #2f5ec3 !important">{{nickname}}</strong
                   >! To complete your sign up, we just need to verify your email
                   address: <br />
                   <strong
                     ><a
                       style="
-                        color: #fff !important;
+                        color: #4d98ee !important;
                         text-decoration: none;
                         cursor: default;
                       "
@@ -197,7 +202,7 @@
                       text-align: center;
                       word-break: break-word;
                       border-collapse: collapse !important;
-                      color: #8e969f;
+                      color: #333435;
                       font-weight: normal;
                       line-height: 19px;
                       padding: 0;
@@ -265,10 +270,10 @@
                   <a
                     style="
                       box-sizing: border-box;
-                      color: #f3f3f3;
+                      color: #4d98ee;
                       text-decoration: none;
                       word-break: break-all;
-                      border-bottom: 1px dashed #f3f3f3;
+                      border-bottom: 1px dashed #4d98ee;
                     "
                     href="{{verifyUrl}}"
                     >{{verifyUrl}}</a

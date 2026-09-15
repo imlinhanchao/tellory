@@ -51,7 +51,7 @@ export class User {
     this.isAdmin = user.isAdmin || false;
     this.avatar = user.avatar || '';
     this.lastLogin = user.lastLogin || 0;
-    this.from = user.from || 'fishpi';
+    this.from = user.from || '';
     this.sourceId = user.sourceId || '';
     this.isVerified = user.isVerified || false;
     this.verificationToken = user.verificationToken || '';

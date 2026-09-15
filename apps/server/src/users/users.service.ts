@@ -67,7 +67,35 @@ export class UsersService {
       lastLogin: Date.now(),
       from: 'fishpi',
       sourceId: user.oId,
+      isVerified: true,
     });
+  }
+
+  async findByVerificationToken(token: string): Promise<User | null> {
+    return this.usersRepository.findOne({
+      where: { verificationToken: token },
+    });
+  }
+
+  async verifyByToken(token: string): Promise<User | null> {
+    const user = await this.findByVerificationToken(token);
+    if (!user) return null;
+    user.isVerified = true;
+    user.verificationToken = '';
+    await this.usersRepository.update({ id: user.id }, user);
+    return user;
+  }
+
+  async setVerificationTokenByEmail(
+    email: string,
+    token: string,
+  ): Promise<User | null> {
+    const user = await this.findByEmail(email);
+    if (!user) return null;
+    user.verificationToken = token;
+    user.isVerified = false;
+    await this.usersRepository.update({ id: user.id }, user);
+    return user;
   }
 
   async getGitHubUser(token: string) {
@@ -81,6 +109,7 @@ export class UsersService {
       lastLogin: Date.now(),
       from: 'github',
       sourceId: userInfo.id,
+      isVerified: true,
     });
   }
 
@@ -97,6 +126,7 @@ export class UsersService {
       lastLogin: Date.now(),
       from: 'steam',
       sourceId: userInfo.steamid,
+      isVerified: true,
     });
   }
 }

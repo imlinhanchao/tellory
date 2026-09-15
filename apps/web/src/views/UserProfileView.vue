@@ -1,33 +1,35 @@
 <template>
   <div v-if="userInfo" class="p-4 sm:p-8 max-w-5xl w-full mx-auto space-y-8">
-    <div
-      class="flex flex-col sm:flex-row items-center gap-6 bg-base-100 p-6 sm:p-8 rounded-3xl border border-base-200 shadow-sm"
-    >
-      <div class="avatar">
-        <div
-          v-if="!userInfo.avatar"
-          class="w-24 h-24 rounded-full bg-primary/10 flex items-center justify-center text-3xl font-bold text-primary"
-        >
-          {{ (userInfo?.nickname || userInfo?.username || "用户").charAt(0) }}
-        </div>
-        <img
-          v-else
-          :src="userInfo.avatar"
-          alt="avatar"
-          class="w-24 h-24 rounded-full object-cover"
-        />
-      </div>
-      <div class="text-center sm:text-left flex-1">
-        <h2 class="text-2xl font-extrabold tracking-tight">
-          {{ userInfo?.nickname || userInfo?.username || "用户" }}
-        </h2>
-        <div class="text-base text-base-content/60 mt-1">
-          {{ totalCount }} 篇创作 · {{ progress.length }} 篇阅读
+    <div class="bg-base-100 p-8 rounded-3xl border border-base-200 shadow-sm flex flex-col md:flex-row gap-8 items-start">
+      <div class="relative">
+        <Avatar :user="userInfo" :size="120" class="ring-4 ring-base-200" />
+        <div v-if="isCurrentUser && userInfo?.email" class="absolute -bottom-2 -right-2">
+          <a :href="cravatarHome" target="_blank" class="btn btn-circle btn-sm btn-primary shadow-lg tooltip tooltip-bottom" data-tip="前往 Cravatar 更换头像">
+            <Icon icon="mdi:pencil" />
+          </a>
         </div>
       </div>
-      <div class="sm:ml-auto">
-        <button class="btn btn-outline btn-sm rounded-full px-6" @click="logout">
-          退出登录
+      <div class="flex-1 space-y-4">
+        <div class="flex items-center gap-3">
+          <h2 class="text-3xl font-black">{{ userInfo?.nickname || userInfo?.username }}</h2>
+          <span v-if="isCurrentUser && !userInfo.isVerified" class="badge badge-warning gap-1">
+            <Icon icon="mdi:alert-circle-outline" /> 未激活
+          </span>
+        </div>
+        <div class="flex gap-6 text-base-content/70">
+          <div class="flex items-center gap-2"><Icon icon="mdi:book-edit" /> {{ totalCount }} 篇创作</div>
+          <div class="flex items-center gap-2"><Icon icon="mdi:book-open-page-variant" /> {{ progress.length }} 篇阅读</div>
+        </div>
+        <div v-if="isCurrentUser && !userInfo.isVerified" class="flex gap-2">
+          <button class="btn btn-sm btn-outline btn-warning" :disabled="sendingVerify" @click="resendVerification">
+            <Icon v-if="!sendingVerify" icon="mdi:email-send" />
+            {{ sendingVerify ? '发送中...' : '重新发送激活邮件' }}
+          </button>
+        </div>
+      </div>
+      <div v-if="isCurrentUser" class="md:ml-auto">
+        <button class="btn btn-ghost btn-sm text-error" @click="logout">
+          <Icon icon="mdi:logout" /> 退出登录
         </button>
       </div>
     </div>
@@ -241,19 +243,20 @@
 
 <script setup lang="ts">
 import { ref, onMounted, computed } from "vue";
+import md5 from "crypto-js/md5";
 import { useRoute, useRouter } from "vue-router";
 import { listStories, type IStory } from "@/api/stories";
 import { getUserUnlocks, type IUserStoryProgress } from "@/api/play";
 import { useAuthStore } from "@/stores/modules/auth";
 import { Icon } from "@iconify/vue";
 import request from "@/utils/http";
+import msg from "@/components/msg";
 import { User } from "@/api/auth";
 
 const route = useRoute();
 const router = useRouter();
 const auth = useAuthStore();
 
-const paramAuthorId = route.params.authorId as string;
 const paramFrom = route.params.from as string | undefined;
 const paramUsername = route.params.username as string | undefined;
 const stories = ref<IStory[]>([]);
@@ -266,6 +269,12 @@ const loading = ref(true);
 const userInfo = ref<User>();
 
 const isCurrentUser = computed(() => auth.getUser?.id === userInfo.value?.id);
+const cravatarHash = computed(() => {
+  const email = userInfo.value?.email;
+  if (!email) return null;
+  return md5(String(email).trim().toLowerCase()).toString();
+});
+const cravatarHome = "https://cravatar.cn/";
 
 // Unlocks modal state
 const unlockModalRef = ref<HTMLDialogElement | null>(null);
@@ -331,6 +340,20 @@ const load = async () => {
     loading.value = false;
   }
 };
+
+const sendingVerify = ref(false);
+async function resendVerification() {
+  if (!userInfo.value?.email) return msg.error('用户无邮箱');
+  sendingVerify.value = true;
+  try {
+    await request.post({ url: '/auth/resend-verification', data: { email: userInfo.value.email } });
+    msg.success('已发送激活邮件，请查收');
+  } catch (e: any) {
+    msg.error(e?.response?.data?.message || e?.message || '发送失败');
+  } finally {
+    sendingVerify.value = false;
+  }
+}
 
 const previewStory = (id: string, status?: string) => {
   router.push({
