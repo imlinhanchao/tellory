@@ -8,6 +8,7 @@ import { PlayStoryDto } from './play.dto';
 import { StoriesService } from '../stories/stories.service';
 import { User } from 'src/users/user.entity';
 import { UsersService } from 'src/users/users.service';
+import { Story } from 'src/stories/story.entity';
 
 @Injectable()
 export class PlayService {
@@ -128,7 +129,7 @@ export class PlayService {
     for (const [storyId, v] of map.entries()) {
       const story =
         storys.find((s) => s.id === storyId) ||
-        approvedStories.find((s) => s.id === storyId);
+        approvedStories.find((s) => s.sourceStoryId === storyId);
       if (!story) continue;
       const latest = latestByStory.get(storyId);
       const isPlaying = !!latest && !latest.isEnding;
@@ -137,6 +138,7 @@ export class PlayService {
         storyId,
         points: v.points,
         end: v.end,
+        status: (story as Story).status || 'published',
         isPlaying,
       });
     }

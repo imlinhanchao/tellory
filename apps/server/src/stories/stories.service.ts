@@ -98,7 +98,7 @@ export class StoriesService {
   async getApprovedByIds(ids: string[]): Promise<ApprovedStory[]> {
     return this.approvedRepo.find({
       where: {
-        id: In(ids),
+        sourceStoryId: In(ids),
       },
     });
   }

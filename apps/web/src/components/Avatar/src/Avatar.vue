@@ -13,8 +13,6 @@
           v-else
           :src="displayAvatar"
           :alt="userAlt"
-          :style="imgStyle"
-          class="rounded-full object-cover"
         />
       </div>
     </component>
@@ -33,8 +31,6 @@
           v-else
           :src="displayAvatar"
           :alt="userAlt"
-          :style="imgStyle"
-          class="rounded-full object-cover"
         />
       </div>
     </component>

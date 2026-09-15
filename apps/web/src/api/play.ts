@@ -31,6 +31,8 @@ export interface IUnlock {
 
 export interface IUserStoryProgress {
   id: string;
+  storyId: string;
+  status: string;
   title: string;
   description: string;
   points: IUnlock[];

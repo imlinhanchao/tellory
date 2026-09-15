@@ -66,7 +66,12 @@
             class="group bg-base-100 border border-base-200 p-6 rounded-2xl hover:border-primary/30 transition-all shadow-sm hover:shadow-md flex flex-col"
           >
             <div class="flex justify-between items-start">
-              <h4 class="font-bold text-lg truncate">{{ p.title }}</h4>
+              <h4 class="font-bold text-lg truncate flex items-center gap-2">
+                {{ p.title }}
+                <button class="btn btn-ghost btn-xs" @click="previewStory(p.storyId!, p.status)">
+                  <Icon icon="mdi:book-open-variant" />
+                </button>
+              </h4>
               <span class="badge badge-sm" :class="p.isPlaying ? 'badge-primary' : 'badge-ghost'">
                 {{ p.isPlaying ? "正在阅读" : "已读" }}
               </span>
@@ -121,12 +126,12 @@
             <div class="flex flex-col h-full">
               <div class="flex-1">
                 <div class="flex items-start justify-between gap-2">
-                  <h3
-                    class="font-bold text-lg truncate cursor-pointer hover:text-primary transition-colors"
-                    @click="previewStory(s.id!, s.status)"
-                  >
-                    {{ s.title || "未命名" }}
-                  </h3>
+                  <h4 class="font-bold text-lg truncate flex items-center gap-2">
+                {{ s.title }}
+                <button class="btn btn-ghost btn-xs" @click="previewStory(s.id!, s.status)">
+                  <Icon icon="mdi:book-open-variant" />
+                </button>
+              </h4>
                   <div v-if="isCurrentUser" class="shrink-0">
                     <span class="badge badge-sm" :class="statusClass(s.status)">{{
                       statusLabel(s.status)
@@ -154,7 +159,7 @@
                   </button>
                   <button
                     class="btn btn-primary btn-xs rounded-full px-4"
-                    @click="previewStory(s.id!)"
+                    @click="previewStory(s.id!, s.status)"
                   >
                     阅读
                   </button>

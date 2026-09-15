@@ -19,5 +19,6 @@ export class PlayStoryDto extends BaseStoryFields {
   storyId: string;
   points: { name: string; description: string }[];
   end: { name: string; description: string }[];
+  status: string;
   isPlaying: boolean;
 }
