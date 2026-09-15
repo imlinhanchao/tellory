@@ -616,6 +616,7 @@ import { useAppStore } from "@/stores/modules/app";
 import { omit } from "lodash-es";
 import msgbox from "@/components/msgbox";
 import Icon from "@/components/Icon/src/Icon.vue";
+import { delay } from "@/utils";
 
 const props = defineProps<{ readOnly?: boolean; initialStory?: any }>();
 
@@ -1099,8 +1100,11 @@ const saveToServer = async () => {
     // eslint-disable-next-line no-console
     console.error("[StoryEditor] syntax check failed", e);
   }
+  await delay(500);
   syntaxIssues.value = issues;
   syntaxChecking.value = false;
+
+  await delay(1500);
 
   if (!issues.length) {
     closeSyntaxDialog();
