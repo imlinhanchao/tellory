@@ -630,6 +630,7 @@ const previewRef = ref<HTMLDialogElement | null>(null);
 const graphRef = ref<HTMLDialogElement | null>(null);
 const jsonEditorRef = ref<HTMLDivElement | null>(null);
 let cmInstance: any = null;
+let globalKeydownHandler: ((e: KeyboardEvent) => void) | null = null;
 // CodeMirror instance for story editor
 // story editor instance moved to StoryEditorPanel component
 const editorPanel = ref<any | null>(null);
@@ -854,6 +855,12 @@ onBeforeUnmount(() => {
       cmPasteInstance.toTextArea();
     } catch {}
     cmPasteInstance = null;
+  }
+  if (globalKeydownHandler) {
+    try {
+      window.removeEventListener('keydown', globalKeydownHandler);
+    } catch {}
+    globalKeydownHandler = null;
   }
 });
 
@@ -1347,6 +1354,21 @@ const saveTags = () => {
 };
 
 onMounted(() => {
+  // register global Ctrl/Cmd+S to trigger save
+  globalKeydownHandler = (e: KeyboardEvent) => {
+    try {
+      const key = (e as KeyboardEvent).key;
+      if ((e.ctrlKey || e.metaKey) && (key === 's' || key === 'S')) {
+        e.preventDefault();
+        // trigger save (syntax check or server save depending on readOnly)
+        // fire asynchronously to avoid blocking the event
+        void saveToServer();
+      }
+    } catch (err) {
+      // ignore
+    }
+  };
+  window.addEventListener('keydown', globalKeydownHandler);
   // if initialStory provided (read-only preview), use it directly
   if (props.initialStory) {
     try {
