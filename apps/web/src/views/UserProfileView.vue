@@ -59,7 +59,7 @@
       </div>
 
       <div v-if="activeTab === 'progress'" class="animate-in fade-in duration-500">
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           <div
             v-for="p in progress"
             :key="p.id"
@@ -76,7 +76,7 @@
                 {{ p.isPlaying ? "正在阅读" : "已读" }}
               </span>
             </div>
-            <p class="text-sm text-base-content/60 line-clamp-3 mt-3 flex-1">
+            <p class="text-sm text-base-content/60 line-clamp-2 mt-3 flex-1">
               {{ p.description || "暂无描述" }}
             </p>
             <div class="mt-6 space-y-3">
@@ -138,7 +138,7 @@
                     }}</span>
                   </div>
                 </div>
-                <p class="text-sm text-base-content/60 line-clamp-3 mt-3">
+                <p class="text-sm text-base-content/60 line-clamp-2 mt-3">
                   {{ s.description || "暂无描述" }}
                 </p>
               </div>
