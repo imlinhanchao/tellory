@@ -1249,7 +1249,7 @@ const selectPassage = (name: string) => {
 
 /** 关系图弹窗：展示段落之间的跳转/包含关系。 */
 const graphStory = computed(() => story.value as unknown as StoryData);
-const graphFullscreen = ref(false);
+const graphFullscreen = ref(true);
 
 const openGraph = () => {
   graphRef.value?.showModal();
