@@ -257,7 +257,7 @@
                 </div>
                 <div
                   class="tooltip tooltip-bottom"
-                  data-tip="提交审核"
+                  :data-tip="`提交审核` + (!currentStoryId || story.status !== 'draft' ? '' : '（请先保存）')"
                   data-tour="btn-submit"
                 >
                   <button
@@ -986,9 +986,24 @@ const ensurePassage = (name: string) => {
   selectedPassage.value = normalized;
 };
 
-const addPassage = () => {
+const addPassage = async () => {
   const baseName = `Passage_${story.value.passages.length + 1}`;
-  ensurePassage(baseName);
+  try {
+    const input = await msgbox.prompt("段落名：", "新增段落", {
+      inputValue: baseName,
+    });
+    if (!input || !input.trim()) return;
+    let name = input.trim();
+    // if name exists, generate a unique one
+    if (story.value.passages.some((p) => p.name === name)) {
+      name = generateUniquePassageName(name);
+    }
+    story.value.passages.push({ name, tags: [], content: "新段落内容" });
+    story.value.passages = normalizePassageTags(story.value.passages);
+    selectedPassage.value = name;
+  } catch (e) {
+    // user cancelled or prompt failed, do nothing
+  }
 };
 
 const generateUniquePassageName = (base: string) => {
