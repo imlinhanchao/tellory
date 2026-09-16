@@ -13,11 +13,26 @@ export async function getPlay(storyId: string) {
   return request.get({ url: `/play/${storyId}` });
 }
 
+export interface IEndingUnlock {
+  name: string;
+  description: string;
+}
+
+export interface IUpdatePlayResponse {
+  id?: string;
+  html?: string;
+  end?: IEndingUnlock | null;
+  [key: string]: any;
+}
+
 export async function updatePlay(
   storyId: string,
   body: { target?: string; action?: string; display?: string },
 ) {
-  return request.put({ url: `/play/${storyId}`, data: body });
+  return request.put<IUpdatePlayResponse>({
+    url: `/play/${storyId}`,
+    data: body,
+  });
 }
 
 export async function resetPlay(storyId: string) {

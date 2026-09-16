@@ -30,7 +30,7 @@
             @click="showRestartConfirm = true"
           >
             <span class="icon-[solar--restart-linear] text-sm"></span>
-            <span>重置</span>
+            <span>{{ isEnding ? '重来' : '重置' }}</span>
           </button>
           <button
             class="btn btn-ghost btn-xs gap-1 hover:text-base-content"
@@ -88,6 +88,44 @@
         </footer>
       </article>
     </main>
+
+    <transition name="ending-unlock-layer">
+      <div
+        v-if="showEndUnlockFx && unlockedEnding"
+        class="pointer-events-auto fixed inset-0 z-[90] flex items-center justify-center px-4"
+        @click.self="dismissEndingUnlock"
+      >
+        <div class="ending-overlay absolute inset-0" @click="dismissEndingUnlock"></div>
+        <div class="ending-burst" aria-hidden="true">
+          <span
+            v-for="n in 12"
+            :key="`spark-${n}`"
+            class="ending-spark"
+            :style="`--spark-index:${n}`"
+          ></span>
+        </div>
+        <div
+          class="ending-card relative w-full max-w-lg rounded-3xl border border-amber-800/25 p-6 sm:p-8 shadow-2xl"
+        >
+          <div class="novel-seal mb-4">终章解锁</div>
+          <h4 class="text-3xl font-serif font-bold text-base-content leading-tight tracking-wide">
+            {{ unlockedEnding.name || "未命名结局" }}
+          </h4>
+          <p class="mt-4 text-base text-base-content/80 leading-relaxed">
+            {{ unlockedEnding.description || "你抵达了故事的一个结局。" }}
+          </p>
+          <div class="ending-divider my-5"></div>
+          <p class="text-xs tracking-[0.22em] text-base-content/55 uppercase">
+            点击任意空白处 或 继续阅读
+          </p>
+          <div class="mt-4">
+            <button class="btn btn-sm btn-neutral" @click="dismissEndingUnlock">
+              继续阅读
+            </button>
+          </div>
+        </div>
+      </div>
+    </transition>
 
     <!-- 开始游玩 / 简介弹窗 -->
     <div
@@ -219,9 +257,12 @@ import {
   getReleaseStory,
   resetPlay,
   getReaders,
+  type IEndingUnlock,
+  type IUpdatePlayResponse,
 } from "@/api/play";
 import { useAppStore } from "@/stores/modules/app";
 import { User } from "@/api/auth";
+import { Message } from "@/components/msg";
 
 const route = useRoute();
 const router = useRouter();
@@ -234,6 +275,9 @@ const currentHtml = ref("");
 const showModal = ref<boolean | null>(null);
 const showDetailModal = ref(false);
 const showRestartConfirm = ref(false);
+const showEndUnlockFx = ref(false);
+const unlockedEnding = ref<IEndingUnlock | null>(null);
+const isEnding = ref(false);
 
 const authorName = computed(
   () =>
@@ -252,6 +296,19 @@ watch(
 onUnmounted(() => {
   appStore.setCustomHeaderTitle(null);
 });
+
+function dismissEndingUnlock() {
+  showEndUnlockFx.value = false;
+}
+
+function triggerEndingUnlock(end: IEndingUnlock | null | undefined) {
+  if (!end) return;
+  const name = (end.name || "").trim() || "未命名结局";
+  const description = (end.description || "").trim() || "你抵达了故事的一个结局。";
+  unlockedEnding.value = { name, description };
+  showEndUnlockFx.value = true;
+  Message.success(`解锁结局：${name}`, 2800);
+}
 
 async function loadStory() {
   const res = await (route.name == "play" ? getReleaseStory : getStory)(
@@ -339,11 +396,19 @@ async function onContentClick(e: MouseEvent) {
       await startPlay();
     }
 
-    const res = await updatePlay(storyId.value, { target, action, display });
+    const res = (await updatePlay(storyId.value, {
+      target,
+      action,
+      display,
+    })) as IUpdatePlayResponse;
     play.value = res as any;
     if (res.html) {
       currentHtml.value = res.html;
       window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+    if (res.end) {
+      triggerEndingUnlock(res.end);
+      isEnding.value = true;
     }
   } catch (err) {
     console.error("[PlayView] interaction update failed", err);
@@ -404,5 +469,131 @@ async function onContentClick(e: MouseEvent) {
 :deep(button[data-story-target]:active),
 :deep(button[data-story-action]:active) {
   transform: translateY(0);
+}
+
+.ending-unlock-layer-enter-active,
+.ending-unlock-layer-leave-active {
+  transition: opacity 0.25s ease;
+}
+
+.ending-unlock-layer-enter-from,
+.ending-unlock-layer-leave-to {
+  opacity: 0;
+}
+
+.ending-overlay {
+  background:
+    radial-gradient(circle at 50% 38%, color-mix(in oklch, var(--color-warning) 18%, transparent) 0%, transparent 52%),
+    radial-gradient(circle at center, color-mix(in oklch, black 35%, transparent) 0%, color-mix(in oklch, black 62%, transparent) 72%);
+  backdrop-filter: blur(2px);
+  animation: ending-overlay-breathe 4.2s ease-in-out infinite;
+}
+
+.ending-card {
+  background:
+    linear-gradient(
+      165deg,
+      color-mix(in oklch, var(--color-base-100) 92%, #f4ead1) 0%,
+      color-mix(in oklch, var(--color-base-100) 88%, #efe0bf) 100%
+    );
+  box-shadow:
+    0 22px 50px -18px color-mix(in oklch, black 46%, transparent),
+    inset 0 0 0 1px color-mix(in oklch, #6a4a2f 18%, transparent);
+  animation: ending-card-reveal 420ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.novel-seal {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid color-mix(in oklch, #6d4f31 35%, transparent);
+  border-radius: 999px;
+  padding: 0.2rem 0.8rem;
+  font-size: 0.72rem;
+  letter-spacing: 0.16em;
+  color: color-mix(in oklch, #5c3f27 88%, var(--color-base-content));
+}
+
+.ending-divider {
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in oklch, #5e3e21 40%, transparent) 20%,
+    color-mix(in oklch, #5e3e21 52%, transparent) 50%,
+    color-mix(in oklch, #5e3e21 40%, transparent) 80%,
+    transparent 100%
+  );
+}
+
+.ending-burst {
+  position: absolute;
+  width: min(72vmin, 430px);
+  aspect-ratio: 1;
+}
+
+.ending-spark {
+  --spark-index: 1;
+  position: absolute;
+  left: calc(50% - 1px);
+  top: 50%;
+  width: 2px;
+  height: 44%;
+  border-radius: 999px;
+  transform-origin: 50% 100%;
+  transform: rotate(calc(var(--spark-index) * 30deg)) translateY(-100%);
+  background: linear-gradient(
+    to top,
+    transparent 0%,
+    color-mix(in oklch, var(--color-warning) 80%, white) 36%,
+    transparent 100%
+  );
+  opacity: 0;
+  animation: ending-spark-burst 1.5s ease-out;
+}
+
+.ending-spark:nth-child(odd) {
+  animation-delay: 0.06s;
+}
+
+@keyframes ending-overlay-breathe {
+  0% {
+    opacity: 0.82;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0.82;
+  }
+}
+
+@keyframes ending-card-reveal {
+  0% {
+    opacity: 0;
+    transform: translateY(16px) scale(0.92);
+    filter: blur(8px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+  }
+}
+
+@keyframes ending-spark-burst {
+  0% {
+    opacity: 0;
+    transform: rotate(calc(var(--spark-index) * 30deg)) translateY(-46%) scaleY(0.4);
+  }
+  20% {
+    opacity: 0.9;
+  }
+  70% {
+    opacity: 0.45;
+  }
+  100% {
+    opacity: 0;
+    transform: rotate(calc(var(--spark-index) * 30deg)) translateY(-108%) scaleY(1.05);
+  }
 }
 </style>

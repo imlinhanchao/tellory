@@ -140,6 +140,7 @@ export class PlayController {
       };
       const newHistory = [...prevHistory, entry];
       let isEnding = false;
+      let end: { name: string; description: string } | null = null;
       // 检查 render-specials（成就/结局），若有则记录为解锁
       try {
         const specials = (runtimeRes as any).specials;
@@ -165,14 +166,18 @@ export class PlayController {
           // ending
           if (specials.ending) {
             isEnding = true;
+            end = {
+              name: String(specials.ending.name || ''),
+              description: String(specials.ending.description || ''),
+            };
             try {
               await this.playService.createUnlock({
                 playId: p.id,
                 storyId: id,
                 userId: p.userId,
                 type: 'ending',
-                name: String(specials.ending.name || ''),
-                description: String(specials.ending.description || ''),
+                name: end.name,
+                description: end.description,
                 meta: { passage: runtimeRes.passage },
               } as any);
             } catch {
@@ -199,6 +204,7 @@ export class PlayController {
         variables: updated.variables || {},
         history: updated.history || [],
         html: runtimeRes.html,
+        end,
       };
     }
     throw new Error('缺少交互目标或动作');
