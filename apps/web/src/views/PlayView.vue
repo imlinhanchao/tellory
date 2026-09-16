@@ -48,12 +48,17 @@
         class="bg-base-100/90 shadow-sm hover:shadow-md transition-shadow duration-300 rounded-2xl p-6 sm:p-12 border border-base-300/60 min-h-[60vh] flex flex-col justify-between"
       >
         <!-- 正文渲染区 -->
-        <div
-          ref="contentRef"
-          class="story-content prose prose-stone lg:prose-lg max-w-none focus:outline-none"
-          v-html="currentHtml"
-          @click="onContentClick"
-        ></div>
+        <div class="page-turn-stage">
+          <transition name="page-turn" mode="out-in">
+            <div
+              :key="sceneRenderKey"
+              ref="contentRef"
+              class="story-content prose prose-stone lg:prose-lg max-w-none focus:outline-none"
+              v-html="currentHtml"
+              @click="onContentClick"
+            ></div>
+          </transition>
+        </div>
 
         <!-- 底部微交互/状态指示 -->
         <footer
@@ -278,6 +283,7 @@ const showRestartConfirm = ref(false);
 const showEndUnlockFx = ref(false);
 const unlockedEnding = ref<IEndingUnlock | null>(null);
 const isEnding = ref(false);
+const sceneRenderKey = ref(0);
 
 const authorName = computed(
   () =>
@@ -337,6 +343,7 @@ async function loadExistingPlay() {
     const p = await getPlay(storyId.value);
     play.value = p;
     currentHtml.value = p.html || "";
+    isEnding.value = !!p?.isEnding;
     return true;
   } catch (err) {
     console.warn("[PlayView] loadExistingPlay failed", err);
@@ -351,6 +358,7 @@ async function startPlay() {
     });
     play.value = res as any;
     currentHtml.value = res.html || "";
+    isEnding.value = false;
     showModal.value = false;
   } catch (err) {
     console.error("startPlay error", err);
@@ -362,6 +370,14 @@ async function confirmRestart() {
   const res = await resetPlay(storyId.value);
   play.value = res as any;
   currentHtml.value = res.html || "";
+  isEnding.value = false;
+}
+
+function applySceneHtml(nextHtml: string, withPageTurn: boolean) {
+  currentHtml.value = nextHtml;
+  if (withPageTurn) {
+    sceneRenderKey.value += 1;
+  }
 }
 
 function closeModal() {
@@ -403,12 +419,14 @@ async function onContentClick(e: MouseEvent) {
     })) as IUpdatePlayResponse;
     play.value = res as any;
     if (res.html) {
-      currentHtml.value = res.html;
+      applySceneHtml(res.html, !res.end);
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
     if (res.end) {
       triggerEndingUnlock(res.end);
       isEnding.value = true;
+    } else {
+      isEnding.value = !!res.isEnding;
     }
   } catch (err) {
     console.error("[PlayView] interaction update failed", err);
@@ -469,6 +487,52 @@ async function onContentClick(e: MouseEvent) {
 :deep(button[data-story-target]:active),
 :deep(button[data-story-action]:active) {
   transform: translateY(0);
+}
+
+.page-turn-stage {
+  perspective: 1500px;
+  transform-style: preserve-3d;
+}
+
+.page-turn-enter-active,
+.page-turn-leave-active {
+  backface-visibility: hidden;
+  transform-origin: left center;
+  will-change: transform, opacity, filter;
+}
+
+.page-turn-leave-active {
+  animation: novel-page-leave 260ms ease-in forwards;
+}
+
+.page-turn-enter-active {
+  animation: novel-page-enter 360ms cubic-bezier(0.22, 0.61, 0.36, 1) forwards;
+}
+
+@keyframes novel-page-leave {
+  0% {
+    opacity: 1;
+    transform: rotateY(0deg) translateX(0);
+    filter: brightness(1);
+  }
+  100% {
+    opacity: 0.08;
+    transform: rotateY(-16deg) translateX(-2%);
+    filter: brightness(0.9);
+  }
+}
+
+@keyframes novel-page-enter {
+  0% {
+    opacity: 0.14;
+    transform: rotateY(14deg) translateX(2%);
+    filter: brightness(1.05);
+  }
+  100% {
+    opacity: 1;
+    transform: rotateY(0deg) translateX(0);
+    filter: brightness(1);
+  }
 }
 
 .ending-unlock-layer-enter-active,
