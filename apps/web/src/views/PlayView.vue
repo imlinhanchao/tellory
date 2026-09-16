@@ -502,35 +502,35 @@ async function onContentClick(e: MouseEvent) {
 }
 
 .page-turn-leave-active {
-  animation: novel-page-leave 260ms ease-in forwards;
+  animation: novel-page-leave 320ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
 }
 
 .page-turn-enter-active {
-  animation: novel-page-enter 360ms cubic-bezier(0.22, 0.61, 0.36, 1) forwards;
+  animation: novel-page-enter 420ms cubic-bezier(0.22, 0.61, 0.36, 1) forwards;
 }
 
 @keyframes novel-page-leave {
   0% {
     opacity: 1;
-    transform: rotateY(0deg) translateX(0);
+    transform: rotate3d(-1, 1, 0, 0deg) translateX(0);
     filter: brightness(1);
   }
   100% {
-    opacity: 0.08;
-    transform: rotateY(-16deg) translateX(-2%);
-    filter: brightness(0.9);
+    opacity: 0;
+    transform: rotate3d(-1, 1, 0, -30deg) translateX(-20%) translateY(-10%);
+    filter: brightness(0.8);
   }
 }
 
 @keyframes novel-page-enter {
   0% {
-    opacity: 0.14;
-    transform: rotateY(14deg) translateX(2%);
-    filter: brightness(1.05);
+    opacity: 0;
+    transform: rotate3d(-1, 1, 0, 30deg) translateX(20%) translateY(10%);
+    filter: brightness(1.1);
   }
   100% {
     opacity: 1;
-    transform: rotateY(0deg) translateX(0);
+    transform: rotate3d(-1, 1, 0, 0deg) translateX(0);
     filter: brightness(1);
   }
 }
