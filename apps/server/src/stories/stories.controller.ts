@@ -88,6 +88,11 @@ export class StoriesController {
     if (!story || story.authorId !== req.user.userId) {
       throw new Error('这不是你的故事');
     }
+    // 不允许删除曾经上架过的故事（存在已上架快照）
+    const approved = await this.storiesService.getApprovedByIds([id]);
+    if (approved && approved.length > 0) {
+      throw new Error('已发布的故事不能删除');
+    }
     return this.storiesService.remove(id);
   }
 

@@ -206,6 +206,17 @@
               />
             </button>
             <button
+              v-if="s.authorId == getUser?.id && isCurrentUser && s.status === 'draft'"
+              class="btn btn-ghost btn-xs btn-square hover:bg-error/10 hover:text-error"
+              @click="confirmDelete(s.id!)"
+              title="删除故事"
+            >
+              <Icon
+                icon="mdi:trash-can-outline"
+                class="w-4 h-4 text-base-content/70"
+              />
+            </button>
+            <button
               v-if="!isCurrentUser"
               class="btn btn-primary btn-xs gap-1"
               @click="previewStory(storyRouteKey(s))"
@@ -266,7 +277,7 @@
           v-if="loadingMore"
           class="loading loading-spinner loading-xs"
         ></span>
-        <Icon v-else icon="mdi:chevron-down" class="w-4 h-4" />
+        <Icon v-else icon="mdi:chevron-down" class=", deleteStoryw-4 h-4" />
         <span>{{ loadingMore ? "加载中..." : "加载更多" }}</span>
       </button>
     </div>
@@ -277,11 +288,12 @@
 import { useRouter } from "vue-router";
 import type { IStory } from "@/api/stories";
 import { useAuthStore } from "@/stores/modules/auth";
-import { listStories, unpublishStory, republishStory } from "@/api/stories";
+import { listStories, unpublishStory, republishStory, deleteStory } from "@/api/stories";
 import { ref, onMounted, watch, reactive, computed } from "vue";
 import { useRoute } from "vue-router";
 import { Icon } from "@iconify/vue";
 import { storyRouteKey } from "@/lib/storyRoute";
+import msgbox from "@/components/msgbox";
 
 const router = useRouter();
 const route = useRoute();
@@ -369,6 +381,16 @@ const confirmRepublish = async (id: string) => {
     await load();
   } catch (err: any) {
     window.alert(err?.response?.data?.message || err?.message || "重新上架失败");
+  }
+};
+
+const confirmDelete = async (id: string) => {
+  if (!await msgbox.confirm("确定要删除此故事吗？此操作不可恢复。")) return;
+  try {
+    await deleteStory(id);
+    await load();
+  } catch (err: any) {
+    window.alert(err?.response?.data?.message || err?.message || "删除失败");
   }
 };
 
