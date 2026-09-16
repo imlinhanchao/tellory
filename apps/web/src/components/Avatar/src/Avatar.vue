@@ -53,14 +53,14 @@ interface IUser {
 
 const props = defineProps<{
   user?: IUser | null;
-  size?: number;
+  size?: number | string;
   shrink?: boolean;
   tip?: boolean;
   link?: boolean;
 }>();
 
 const user = toRef(props, "user");
-const size = computed(() => props.size ?? 40);
+const size = computed(() => (props.size || 40)?.toString().match(/^[\d.]+$/) ? Number(props.size || 40) + 'px' : props.size);
 const shrinkClass = computed(() => (props.shrink ? "shrink-0" : ""));
 const tip = computed(() => !!props.tip);
 const link = computed(() => !!props.link);
@@ -74,9 +74,8 @@ const initials = computed(() => {
 const userAlt = computed(() => user.value?.nickname || user.value?.username || "avatar");
 const tooltipText = computed(() => user.value?.nickname || user.value?.username || "");
 
-const containerStyle = computed(() => ({ width: `${size.value}px`, height: `${size.value}px` }));
-const imgStyle = computed(() => ({ width: `${size.value}px`, height: `${size.value}px` }));
-const fallbackStyle = computed(() => ({ width: `${size.value}px`, height: `${size.value}px`, fontSize: `${Math.max(12, Math.floor(size.value / 2.5))}px` }));
+const containerStyle = computed(() => ({ width: size.value, height: size.value }));
+const fallbackStyle = computed(() => ({ width: size.value, height: size.value, fontSize: `${Math.max(12, Math.floor(Number(size.value) / 2.5))}px` }));
 const fallbackClass = computed(() => "rounded-full bg-primary/15 text-primary flex items-center justify-center text-sm font-bold border border-primary/20");
 
 const userLink = computed(() => {
