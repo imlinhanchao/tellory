@@ -2,6 +2,7 @@
   <div class="h-full md:p-4 w-full">
     <div class="flex h-full md:gap-4">
       <aside
+        v-if="!isMobile"
         data-tour="passage-list"
         class="hidden lg:block rounded-2xl border border-base-300 bg-base-100 p-3 shadow-sm min-w-70"
       >
@@ -63,9 +64,19 @@
           class="modal modal-bottom sm:modal-middle w-screen"
         >
           <div class="modal-box h-[80vh] flex flex-col relative">
-            <h3 class="font-bold text-lg pb-3">
-              段落列表 ({{ filteredPassages.length }})
-            </h3>
+            <header class="flex justify-between items-center pb-3">
+              <h3 class="font-bold text-lg">
+                段落列表 ({{ filteredPassages.length }})
+              </h3>
+              <button
+                v-if="!props.readOnly"
+                class="btn btn-sm btn-primary"
+                type="button"
+                @click="addPassage"
+              >
+                新增
+              </button>
+            </header>
             <div class="mb-4">
               <input
                 v-model="searchFilter"
@@ -121,9 +132,10 @@
             :class="{ flex: !isMobile }"
           >
             <div class="flex items-center gap-2 flex-1 min-w-60">
-              <div class="lg:hidden">
+              <div class="lg:hidden" v-if="isMobile">
                 <button
                   class="btn btn-sm btn-square btn-ghost"
+                  data-tour="passage-list"
                   @click="passageRef?.showModal()"
                 >
                   <Icon icon="mdi:menu" size="16px" />
@@ -135,8 +147,9 @@
                 class="input input-bordered input-sm flex-1 font-bold text-base bg-base-100"
                 placeholder="故事标题..."
               />
-              <div class="lg:hidden">
+              <div v-if="isMobile">
                 <button
+                  data-tour="right-panel"
                   class="btn btn-sm btn-square btn-ghost"
                   @click="
                     activeRightTab = 'preview';
@@ -541,7 +554,7 @@
         </template>
       </div>
     </dialog>
-    <dialog ref="graphRef" class="modal" @close="graphFullscreen = false">
+    <dialog ref="graphRef" class="modal" @close="graphFullscreen = true">
       <div
         class="modal-box w-screen p-2!"
         :class="
