@@ -339,6 +339,15 @@ const dragging = ref(false);
 const hoveredId = ref("");
 const suppressClick = ref(false);
 
+type PointerPoint = { x: number; y: number };
+type DragState = { pointerId: number; x: number; y: number; moved: boolean };
+type PinchState = {
+  startDistance: number;
+  startScale: number;
+  worldX: number;
+  worldY: number;
+};
+
 const transform = computed(
   () => `translate(${pan.value.x} ${pan.value.y}) scale(${scale.value})`,
 );
@@ -387,7 +396,44 @@ watch([() => layout.value, hostWidth, hostHeight], () => fit(), {
 
 // ---- 指针交互 ----------------------------------------------------------
 
-let dragState: { x: number; y: number; moved: boolean } | null = null;
+const activePointers = new Map<number, PointerPoint>();
+let dragState: DragState | null = null;
+let pinchState: PinchState | null = null;
+
+function firstTwoPointers(): [PointerPoint, PointerPoint] | null {
+  const points = [...activePointers.values()];
+  if (points.length < 2) return null;
+  return [points[0], points[1]];
+}
+
+function beginPinch() {
+  const points = firstTwoPointers();
+  if (!points) {
+    pinchState = null;
+    return;
+  }
+
+  const [a, b] = points;
+  const centerX = (a.x + b.x) / 2;
+  const centerY = (a.y + b.y) / 2;
+  const distance = Math.hypot(a.x - b.x, a.y - b.y);
+
+  if (distance < 2) {
+    pinchState = null;
+    return;
+  }
+
+  pinchState = {
+    startDistance: distance,
+    startScale: scale.value,
+    worldX: (centerX - pan.value.x) / scale.value,
+    worldY: (centerY - pan.value.y) / scale.value,
+  };
+
+  suppressClick.value = true;
+  dragging.value = false;
+  dragState = null;
+}
 
 function onWheel(event: WheelEvent) {
   if (!props.interactive) return;
@@ -401,37 +447,112 @@ function onWheel(event: WheelEvent) {
 }
 
 function onPointerDown(event: PointerEvent) {
-  if (!props.interactive || event.button !== 0) return;
-  const target = event.target as Element | null;
-  if (target?.closest?.(".sg-node")) return;
+  if (!props.interactive) return;
+  if (event.pointerType === "mouse" && event.button !== 0) return;
 
-  suppressClick.value = false;
-  dragState = { x: event.clientX, y: event.clientY, moved: false };
+  const host = event.currentTarget as HTMLElement;
+  const target = event.target as Element | null;
+  const onNode = !!target?.closest?.(".sg-node");
+  const isTouchLike = event.pointerType === "touch" || event.pointerType === "pen";
+
+  if (onNode && !isTouchLike) return;
+
+  if (activePointers.size === 0) suppressClick.value = false;
+  activePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+  host.setPointerCapture?.(event.pointerId);
+
+  if (activePointers.size >= 2) {
+    beginPinch();
+    return;
+  }
+
+  if (onNode) {
+    dragging.value = false;
+    dragState = null;
+    return;
+  }
+
+  dragState = {
+    pointerId: event.pointerId,
+    x: event.clientX,
+    y: event.clientY,
+    moved: false,
+  };
   dragging.value = true;
-  (event.currentTarget as HTMLElement).setPointerCapture?.(event.pointerId);
 }
 
 function onPointerMove(event: PointerEvent) {
-  if (!dragState) return;
-  const dx = event.clientX - dragState.x;
-  const dy = event.clientY - dragState.y;
+  const current = activePointers.get(event.pointerId);
+  if (!current) return;
+
+  const next = { x: event.clientX, y: event.clientY };
+  activePointers.set(event.pointerId, next);
+
+  if (pinchState && activePointers.size >= 2) {
+    const points = firstTwoPointers();
+    if (!points) return;
+    const [a, b] = points;
+    const centerX = (a.x + b.x) / 2;
+    const centerY = (a.y + b.y) / 2;
+    const distance = Math.hypot(a.x - b.x, a.y - b.y);
+    if (distance < 2) return;
+
+    const nextScale = clampScale(
+      pinchState.startScale * (distance / pinchState.startDistance),
+    );
+    scale.value = nextScale;
+    pan.value = {
+      x: centerX - pinchState.worldX * nextScale,
+      y: centerY - pinchState.worldY * nextScale,
+    };
+    return;
+  }
+
+  if (!dragState || dragState.pointerId !== event.pointerId) return;
+
+  const dx = next.x - dragState.x;
+  const dy = next.y - dragState.y;
   if (Math.abs(dx) > 3 || Math.abs(dy) > 3) dragState.moved = true;
   pan.value = { x: pan.value.x + dx, y: pan.value.y + dy };
-  dragState.x = event.clientX;
-  dragState.y = event.clientY;
+  dragState.x = next.x;
+  dragState.y = next.y;
 }
 
 function onPointerUp(event: PointerEvent) {
-  if (!dragState) return;
-  suppressClick.value = dragState.moved;
-  dragState = null;
-  dragging.value = false;
+  if (!activePointers.has(event.pointerId)) return;
+
+  if (dragState?.pointerId === event.pointerId) {
+    suppressClick.value = suppressClick.value || dragState.moved;
+  }
+
+  activePointers.delete(event.pointerId);
   (event.currentTarget as HTMLElement).releasePointerCapture?.(event.pointerId);
+
+  if (pinchState) {
+    if (activePointers.size >= 2) {
+      beginPinch();
+      return;
+    }
+
+    pinchState = null;
+    if (activePointers.size === 1) {
+      const [entry] = activePointers.entries();
+      if (entry) {
+        const [pointerId, point] = entry;
+        dragState = { pointerId, x: point.x, y: point.y, moved: false };
+        dragging.value = true;
+        return;
+      }
+    }
+  }
+
+  if (dragState?.pointerId === event.pointerId) dragState = null;
+  dragging.value = false;
 }
 
 function onPointerLeave() {
   // 拖拽中由 pointer capture 继续接管，避免中途丢失拖拽状态
-  if (dragging.value) return;
+  if (dragging.value || pinchState) return;
   dragState = null;
 }
 
@@ -510,6 +631,8 @@ onBeforeUnmount(() => {
   resizeObserver = null;
   window.removeEventListener("resize", measure);
   dragState = null;
+  pinchState = null;
+  activePointers.clear();
 });
 </script>
 
