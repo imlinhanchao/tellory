@@ -35,6 +35,9 @@ export class User {
   @Column({ default: false, comment: '是否验证' })
   isVerified: boolean = false;
 
+  @Column({ default: false, comment: '是否已完成编辑器引导' })
+  isToured: boolean = false;
+
   @Column({ comment: '验证 Token', nullable: true })
   verificationToken?: string;
 
@@ -54,6 +57,7 @@ export class User {
     this.from = user.from || '';
     this.sourceId = user.sourceId || '';
     this.isVerified = user.isVerified || false;
+    this.isToured = user.isToured || false;
     this.verificationToken = user.verificationToken || '';
   }
 }

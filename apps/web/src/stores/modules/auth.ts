@@ -31,6 +31,13 @@ export const useAuthStore = defineStore("auth", () => {
     storage.removeItem("user");
   }
 
+  /** 局部更新当前用户信息并持久化（例如标记已完成引导） */
+  function patchUser(patch: Record<string, any>) {
+    if (!user.value) return;
+    user.value = { ...user.value, ...patch };
+    storage.setItem("user", JSON.stringify(user.value));
+  }
+
   async function loadProfile() {
     if (!token.value) return;
 
@@ -71,6 +78,7 @@ export const useAuthStore = defineStore("auth", () => {
     getUser,
     setAuth,
     loginWithToken,
+    patchUser,
     logout,
     loadProfile,
     checkConfig,

@@ -1,5 +1,5 @@
 <template>
-  <div class="space-y-4 rounded-xl border border-base-300 bg-base-200/50 md:p-3 h-full flex flex-col flex-1">
+  <div class="md:max-w-115 space-y-4 rounded-xl border border-base-300 bg-base-200/50 md:p-3 h-full flex flex-col flex-1">
     <div class="mb-2 flex items-center justify-between bg-base-200 flex-none">
       <div class="tabs tabs-boxed p-0.5">
         <a

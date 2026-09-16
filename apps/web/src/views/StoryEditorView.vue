@@ -2,6 +2,7 @@
   <div class="h-full md:p-4 w-full">
     <div class="flex h-full md:gap-4">
       <aside
+        data-tour="passage-list"
         class="hidden lg:block rounded-2xl border border-base-300 bg-base-100 p-3 shadow-sm min-w-70"
       >
         <div class="mb-3 flex items-center justify-between px-1">
@@ -105,6 +106,7 @@
         class="rounded-2xl border border-base-300 bg-base-100 md:p-4 shadow-sm w-full"
       >
         <div
+          data-tour="story-info"
           class="mb-4 space-y-2.5 bg-base-200/40 p-3 rounded-xl border border-base-200"
         >
           <div
@@ -149,7 +151,21 @@
               class="flex items-center gap-1 md:shrink-0"
               :class="{ 'py-2 justify-around': isMobile }"
             >
-              <div v-if="!props.readOnly" class="tooltip tooltip-bottom" data-tip="从剪贴板粘贴导入">
+              <div class="tooltip tooltip-bottom" data-tip="编辑器引导" data-tour="btn-tour">
+                <button
+                  class="btn btn-sm btn-ghost btn-square"
+                  type="button"
+                  @click="startEditorTour"
+                >
+                  <Icon icon="mdi:help-circle-outline" size="16px" />
+                </button>
+              </div>
+              <div
+                v-if="!props.readOnly"
+                class="tooltip tooltip-bottom"
+                data-tip="从剪贴板粘贴导入"
+                data-tour="btn-paste"
+              >
                 <button
                   class="btn btn-sm btn-ghost btn-square"
                   type="button"
@@ -161,6 +177,7 @@
               <div
                 class="tooltip tooltip-bottom"
                 data-tip="复制文本源码"
+                data-tour="btn-copy"
               >
                 <button
                   class="btn btn-sm btn-ghost btn-square"
@@ -173,6 +190,7 @@
               <div
                 class="tooltip tooltip-bottom"
                 data-tip="编译导出 HTML 文件"
+                data-tour="btn-build"
               >
                 <button
                   class="btn btn-sm btn-ghost btn-square"
@@ -182,7 +200,11 @@
                   <Icon icon="mdi:hammer" size="16px" />
                 </button>
               </div>
-              <div class="tooltip tooltip-bottom" data-tip="段落关系图">
+              <div
+                class="tooltip tooltip-bottom"
+                data-tip="段落关系图"
+                data-tour="btn-graph"
+              >
                 <button
                   class="btn btn-sm btn-ghost btn-square"
                   type="button"
@@ -191,7 +213,12 @@
                   <Icon icon="mdi:graph-outline" size="16px" />
                 </button>
               </div>
-              <div v-if="currentStoryId" class="tooltip tooltip-bottom" data-tip="试玩故事">
+              <div
+                v-if="currentStoryId"
+                class="tooltip tooltip-bottom"
+                data-tip="试玩故事"
+                data-tour="btn-test"
+              >
                 <button
                   class="btn btn-sm btn-ghost btn-secondary btn-circle"
                   type="button"
@@ -201,7 +228,11 @@
                 </button>
               </div>
               <template v-if="!props.readOnly">
-                <div class="tooltip tooltip-bottom" data-tip="保存至服务器">
+                <div
+                  class="tooltip tooltip-bottom"
+                  data-tip="保存至服务器"
+                  data-tour="btn-save"
+                >
                   <button
                     class="btn btn-sm btn-primary btn-ghost btn-circle"
                     type="button"
@@ -214,11 +245,12 @@
                 <div
                   class="tooltip tooltip-bottom"
                   data-tip="提交审核"
-                  v-if="currentStoryId && story.status === 'draft'"
+                  data-tour="btn-submit"
                 >
                   <button
                     class="btn btn-sm btn-ghost btn-accent btn-circle"
                     type="button"
+                    :disabled="!(currentStoryId && story.status === 'draft')"
                     @click="submitForReview"
                   >
                     <Icon icon="fa:paper-plane" size="16px" />
@@ -327,6 +359,7 @@
 
           <StoryRightPanel
             v-if="!isMobile"
+            data-tour="right-panel"
             :story="story"
             :variables="variables"
             :previewPassage="previewPassage"
@@ -565,6 +598,16 @@
       </form>
     </dialog>
     <SyntaxManual v-if="showManual" @close="showManual = false" />
+
+    <!-- 编辑器使用引导 -->
+    <Tour
+      ref="tourRef"
+      v-model="tourOpen"
+      :steps="tourSteps"
+      finish-text="开始创作"
+      @finish="markTourSeen"
+      @close="markTourSeen"
+    />
   </div>
 </template>
 <script setup lang="ts">
@@ -584,6 +627,7 @@ import {
   publishStory,
   IStory,
 } from "@/api/stories";
+import { completeTour } from "@/api/user";
 import StoryPlayView from "@/views/StoryPlayView.vue";
 import StoryEditorPanel from "@/components/StoryEditor/StoryEditorPanel.vue";
 import StoryRightPanel from "@/components/StoryEditor/StoryRightPanel.vue";
@@ -613,14 +657,19 @@ import "codemirror/mode/javascript/javascript";
 import "codemirror/addon/mode/simple";
 import msg from "@/components/msg";
 import { useAppStore } from "@/stores/modules/app";
+import { useAuthStore } from "@/stores/modules/auth";
 import { omit } from "lodash-es";
 import msgbox from "@/components/msgbox";
 import Icon from "@/components/Icon/src/Icon.vue";
+import Tour from "@/components/Tour/src/Tour.vue";
+import type { TourStep } from "@/components/Tour/src/types";
+import { availableTourSteps } from "@/lib/editorTour";
 import { delay } from "@/utils";
 
 const props = defineProps<{ readOnly?: boolean; initialStory?: any }>();
 
 const appStore = useAppStore();
+const authStore = useAuthStore();
 const isDark = computed(() => appStore.getTheme === "dark");
 const isMobile = computed(() => appStore.isMobile);
 
@@ -648,6 +697,39 @@ const syntaxDialogRef = ref<HTMLDialogElement | null>(null);
 const syntaxChecking = ref(false);
 const syntaxIssues = ref<StorySyntaxIssue[]>([]);
 const saveInProgress = ref(false);
+
+/* ---------------------------- 编辑器使用引导 ---------------------------- */
+const tourRef = ref<any | null>(null);
+const tourOpen = ref(false);
+const tourSteps = ref<TourStep[]>([]);
+
+/** 打开编辑器引导；移动端或只读模式下会自动跳过不可用的步骤 */
+const startEditorTour = async () => {
+  const steps = availableTourSteps();
+  if (steps.length < 2) return;
+  tourSteps.value = steps;
+  tourOpen.value = true;
+  await nextTick();
+  await tourRef.value?.open(0);
+};
+
+/** 记下已走过引导（写入用户表），之后再进编辑器不再自动弹出 */
+const markTourSeen = async () => {
+  if (props.readOnly || authStore.getUser?.isToured) return;
+  // 先更新本地状态，避免同一次会话里重复弹出
+  authStore.patchUser({ isToured: true });
+  try {
+    await completeTour();
+  } catch (e) {
+    // 写库失败不影响当前会话，下次进入可能再引导一次
+  }
+};
+
+const maybeAutoStartTour = () => {
+  if (props.readOnly) return;
+  if (authStore.getUser?.isToured) return;
+  window.setTimeout(() => void startEditorTour(), 900);
+};
 
 /** 语法问题类型 -> 中文标签 */
 const SYNTAX_ISSUE_LABELS: Record<string, string> = {
@@ -1394,6 +1476,7 @@ onMounted(() => {
   }
 
   init();
+  maybeAutoStartTour();
 });
 
 function init() {

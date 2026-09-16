@@ -86,6 +86,15 @@ export class UsersService {
     return user;
   }
 
+  /** 记录用户是否已经走过编辑器引导 */
+  async setToured(id: string, isToured = true): Promise<User | null> {
+    const user = await this.findById(id);
+    if (!user) return null;
+    user.isToured = isToured;
+    await this.usersRepository.update({ id: user.id }, { isToured });
+    return user;
+  }
+
   async setVerificationTokenByEmail(
     email: string,
     token: string,

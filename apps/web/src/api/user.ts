@@ -6,6 +6,8 @@ export interface UserProfile {
   nickname?: string;
   avatar?: string;
   isAdmin: boolean;
+  /** 是否已完成编辑器引导 */
+  isToured?: boolean;
   points: number;
   createdAt: string;
 }
@@ -15,6 +17,13 @@ export interface UserProfile {
  */
 export function getUserProfile() {
   return request.get<UserProfile>({ url: "/users/profile" });
+}
+
+/**
+ * 记录当前用户是否已经走过编辑器引导
+ */
+export function completeTour(isToured = true) {
+  return request.post<UserProfile>({ url: "/users/tour", data: { isToured } });
 }
 
 /**
