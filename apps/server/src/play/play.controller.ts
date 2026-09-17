@@ -82,7 +82,13 @@ export class PlayController {
       html: runtime.html,
     };
     const created = await this.playService.create(payload);
-    return { html: created.html, history: [] };
+    const isAuthorOrAdmin =
+      story.authorId === userId || req.user?.isAdmin || false;
+    return {
+      html: created.html,
+      history: [],
+      variables: isAuthorOrAdmin ? created.variables : {},
+    };
   }
 
   @UseGuards(JwtAuthGuard)
@@ -90,9 +96,11 @@ export class PlayController {
   async getPlay(@Param('id') id: string, @Request() req) {
     const p = await this.playService.findLatestByStoryId(id, req.user?.userId);
     if (!p || p.storyId !== id) return null;
+    const isAuthorOrAdmin =
+      p.userId === req.user?.userId || req.user?.isAdmin || false;
     return {
       ...p,
-      variables: p.variables || {},
+      variables: isAuthorOrAdmin ? p.variables || {} : {},
       history: p.history || [],
     };
   }
@@ -199,9 +207,11 @@ export class PlayController {
       });
       if (!updated) return null;
 
+      const isAuthorOrAdmin =
+        p.userId === req.user?.userId || req.user?.isAdmin || false;
       return {
         ...updated,
-        variables: updated.variables || {},
+        variables: isAuthorOrAdmin ? updated.variables || {} : {},
         history: updated.history || [],
         html: runtimeRes.html,
         end,

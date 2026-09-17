@@ -15,7 +15,7 @@
             class="btn btn-ghost btn-xs gap-1 hover:text-base-content"
             @click="router.push('/stories')"
           >
-            <span class="icon-[solar--arrow-left-linear] text-sm"></span>
+            <Icon icon="mdi:arrow-left" class="size-3.5" />
             <span>返回故事</span>
           </button>
           <span v-if="story?.author" class="opacity-60">
@@ -24,12 +24,13 @@
         </div>
 
         <div class="flex items-center gap-1">
-          <button
+            <button
+
             class="btn btn-ghost btn-xs gap-1 hover:text-base-content"
             title="重新开始"
             @click="showRestartConfirm = true"
           >
-            <span class="icon-[solar--restart-linear] text-sm"></span>
+            <Icon icon="mdi:restart" class="size-3.5" />
             <span>{{ isEnding ? '重来' : '重置' }}</span>
           </button>
           <button
@@ -37,7 +38,7 @@
             title="故事详情"
             @click="showDetailModal = true"
           >
-            <span class="icon-[solar--info-circle-linear] text-sm"></span>
+            <Icon icon="mdi:information-outline" class="size-3.5" />
             <span>简介</span>
           </button>
         </div>
@@ -94,6 +95,15 @@
       </article>
     </main>
 
+    <VariableInspector
+      :is-test="isTest"
+      :variables="variables"
+      :drawer-open="inspectorDrawerOpen"
+      @view="openValueModal"
+      @toggle-drawer="inspectorDrawerOpen = !inspectorDrawerOpen"
+      @close-drawer="inspectorDrawerOpen = false"
+    />
+
     <transition name="ending-unlock-layer">
       <div
         v-if="showEndUnlockFx && unlockedEnding"
@@ -135,7 +145,7 @@
     <!-- 开始游玩 / 简介弹窗 -->
     <div
       v-if="showModal === true"
-      class="modal modal-open backdrop-blur-sm bg-base-900/40"
+      class="modal modal-open backdrop-blur-sm bg-neutral/40"
     >
       <div
         class="modal-box max-w-lg border border-base-300/80 shadow-2xl p-6 sm:p-8 rounded-2xl bg-base-100 font-sans"
@@ -203,7 +213,7 @@
     <!-- 故事详情弹窗 -->
     <div
       v-if="showDetailModal"
-      class="modal modal-open backdrop-blur-sm bg-base-900/40"
+      class="modal modal-open backdrop-blur-sm bg-neutral/40"
     >
       <div
         class="modal-box max-w-md border border-base-300/80 rounded-2xl p-6 bg-base-100 font-sans"
@@ -226,7 +236,7 @@
     <!-- 重新开始确认弹窗 -->
     <div
       v-if="showRestartConfirm"
-      class="modal modal-open backdrop-blur-sm bg-base-900/40"
+      class="modal modal-open backdrop-blur-sm bg-neutral/40"
     >
       <div
         class="modal-box max-w-sm border border-base-300/80 rounded-2xl p-6 bg-base-100 font-sans"
@@ -249,6 +259,58 @@
       </div>
     </div>
   </div>
+
+  <!-- 变量值查看弹窗 -->
+  <div v-if="showValueModal" class="modal modal-open backdrop-blur-sm bg-neutral/40">
+    <div
+      class="modal-box max-w-xl overflow-hidden rounded-2xl border border-base-300/70 bg-base-100 p-0 font-sans"
+      @click.stop
+    >
+      <header class="flex items-center gap-2 border-b border-base-300/50 px-4 py-3">
+        <span
+          class="flex size-6 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary"
+        >
+          <Icon icon="mdi:code-json" class="size-3.5" />
+        </span>
+        <h3 class="truncate font-mono text-sm text-base-content/80">
+          {{ selectedKey }}
+        </h3>
+        <span class="badge badge-xs badge-soft shrink-0 font-mono">
+          {{ selectedValueLabel }}
+        </span>
+        <div class="ml-auto flex shrink-0 items-center gap-0.5">
+          <button
+            type="button"
+            class="btn btn-ghost btn-xs btn-square"
+            title="复制 JSON"
+            @click="copySelectedValue"
+          >
+            <Icon
+              :icon="copiedValue ? 'mdi:check' : 'mdi:content-copy'"
+              class="size-3.5"
+              :class="copiedValue ? 'text-success' : ''"
+            />
+          </button>
+          <button
+            type="button"
+            class="btn btn-ghost btn-xs btn-square"
+            title="关闭"
+            @click="closeValueModal"
+          >
+            <Icon icon="mdi:close" class="size-4" />
+          </button>
+        </div>
+      </header>
+
+      <div class="max-h-[60vh] overflow-auto bg-base-200/30 p-3">
+        <JsonView :data="selectedValue" :default-open-depth="2" />
+      </div>
+
+      <footer class="flex justify-end border-t border-base-300/50 px-4 py-2.5">
+        <button class="btn btn-sm btn-ghost" @click="closeValueModal">关闭</button>
+      </footer>
+    </div>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -268,6 +330,10 @@ import {
 import { useAppStore } from "@/stores/modules/app";
 import { User } from "@/api/auth";
 import { Message } from "@/components/msg";
+import { useAuthStore } from "@/stores/modules/auth";
+import VariableInspector from "@/components/debug/VariableInspector.vue";
+import JsonView from "@/components/debug/JsonView.vue";
+import Icon from "@/components/Icon/src/Icon.vue";
 
 const route = useRoute();
 const router = useRouter();
@@ -277,6 +343,7 @@ const storyId = ref<string>(route.params.storyId.toString() || "");
 const story = ref<any>(null);
 const play = ref<any>(null);
 const currentHtml = ref("");
+const variables = ref<Record<string, any>>({});
 const showModal = ref<boolean | null>(null);
 const showDetailModal = ref(false);
 const showRestartConfirm = ref(false);
@@ -284,6 +351,46 @@ const showEndUnlockFx = ref(false);
 const unlockedEnding = ref<IEndingUnlock | null>(null);
 const isEnding = ref(false);
 const sceneRenderKey = ref(0);
+
+// Inspector state (测试模式)
+const inspectorDrawerOpen = ref(false);
+const selectedKey = ref<string | null>(null);
+const selectedValue = ref<any>(null);
+const showValueModal = ref(false);
+const copiedValue = ref(false);
+
+const selectedValueLabel = computed(() => {
+  const v = selectedValue.value;
+  if (Array.isArray(v)) return `array · ${v.length}`;
+  if (v !== null && typeof v === "object") {
+    return `object · ${Object.keys(v).length}`;
+  }
+  return typeof v;
+});
+
+function openValueModal(payload: { key: string; value: any }) {
+  selectedKey.value = payload.key;
+  selectedValue.value = payload.value;
+  showValueModal.value = true;
+}
+
+function closeValueModal() {
+  showValueModal.value = false;
+  selectedKey.value = null;
+  selectedValue.value = null;
+}
+
+async function copySelectedValue() {
+  try {
+    await navigator.clipboard.writeText(
+      JSON.stringify(selectedValue.value, null, 2),
+    );
+    copiedValue.value = true;
+    window.setTimeout(() => (copiedValue.value = false), 1200);
+  } catch {
+    /* 忽略剪贴板不可用的情况 */
+  }
+}
 
 const authorName = computed(
   () =>
@@ -344,6 +451,7 @@ async function loadExistingPlay() {
     play.value = p;
     currentHtml.value = p.html || "";
     isEnding.value = !!p?.isEnding;
+    variables.value = p.variables || {};
     return true;
   } catch (err) {
     console.warn("[PlayView] loadExistingPlay failed", err);
@@ -359,6 +467,7 @@ async function startPlay() {
     play.value = res as any;
     currentHtml.value = res.html || "";
     isEnding.value = false;
+    variables.value = {};
     showModal.value = false;
   } catch (err) {
     console.error("startPlay error", err);
@@ -371,6 +480,7 @@ async function confirmRestart() {
   play.value = res as any;
   currentHtml.value = res.html || "";
   isEnding.value = false;
+  variables.value = {};
 }
 
 function applySceneHtml(nextHtml: string, withPageTurn: boolean) {
@@ -420,6 +530,7 @@ async function onContentClick(e: MouseEvent) {
     play.value = res as any;
     if (res.html) {
       applySceneHtml(res.html, !res.end);
+      variables.value = res.variables || {};
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
     if (res.end) {
@@ -432,6 +543,9 @@ async function onContentClick(e: MouseEvent) {
     console.error("[PlayView] interaction update failed", err);
   }
 }
+
+const { getUser: userInfo } = useAuthStore();
+const isTest = computed(() => route.name == 'test' && (userInfo.isAdmin || story.value.authorId == userInfo.id))
 </script>
 
 <style scoped>
@@ -659,5 +773,21 @@ async function onContentClick(e: MouseEvent) {
     opacity: 0;
     transform: rotate(calc(var(--spark-index) * 30deg)) translateY(-108%) scaleY(1.05);
   }
+}
+
+/* Inspector styles */
+.inspector-pre {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, "Roboto Mono", "Segoe UI Mono", monospace;
+  font-size: 12px;
+}
+
+.slide-fade-enter-active,
+.slide-fade-leave-active {
+  transition: all 220ms ease;
+}
+.slide-fade-enter-from,
+.slide-fade-leave-to {
+  transform: translateX(12px);
+  opacity: 0;
 }
 </style>
