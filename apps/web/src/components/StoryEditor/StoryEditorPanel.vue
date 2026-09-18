@@ -1,119 +1,125 @@
 <template>
   <div class="rounded-xl border border-base-300 bg-base-200/50">
     <div class="tools px-3 pt-3 z-100 sticky top-17.5 mb-4 flex flex-wrap items-center bg-base-200 rounded-xl border border-base-200" data-tour="editor-tools">
-      <div class="md:tooltip tooltip-bottom" data-tip="插入链接 [[显示|段落]]" data-tour="tool-link">
-        <button class="btn btn-sm btn-ghost btn-square" type="button" @click="openSyntaxBuilder('link')">
-          <Icon icon="mdi:link-variant" class="text-lg" />
-        </button>
-      </div>
+      <div class="inline md:inline-flex flex-wrap" data-tour="editor-syntax-tools">
+        <div class="inline md:tooltip tooltip-bottom" data-tip="插入链接 [[显示|段落]]" data-tour="tool-link">
+          <button class="btn btn-sm btn-ghost btn-square" type="button" @click="openSyntaxBuilder('link')">
+            <Icon icon="mdi:link-variant" class="text-lg" />
+          </button>
+        </div>
 
-      <div class="md:tooltip tooltip-bottom" data-tip="插入条件分支 (if:)" data-tour="tool-if">
-        <button class="btn btn-sm btn-ghost btn-square" type="button" @click="openSyntaxBuilder('if')">
-          <Icon icon="mdi:source-branch" class="text-lg" />
-        </button>
-      </div>
+        <div class="inline md:tooltip tooltip-bottom" data-tip="插入条件分支 (if:)" data-tour="tool-if">
+          <button class="btn btn-sm btn-ghost btn-square" type="button" @click="openSyntaxBuilder('if')">
+            <Icon icon="mdi:source-branch" class="text-lg" />
+          </button>
+        </div>
 
-      <div class="md:tooltip tooltip-bottom" data-tip="变量赋值 (set:)" data-tour="tool-set">
-        <button class="btn btn-sm btn-ghost btn-square" type="button" @click="openSyntaxBuilder('set')">
-          <Icon icon="mdi:plus-box-outline" class="text-lg" />
-        </button>
-      </div>
+        <div class="inline md:tooltip tooltip-bottom" data-tip="变量赋值 (set:)" data-tour="tool-set">
+          <button class="btn btn-sm btn-ghost btn-square" type="button" @click="openSyntaxBuilder('set')">
+            <Icon icon="mdi:plus-box-outline" class="text-lg" />
+          </button>
+        </div>
 
-      <div class="md:tooltip tooltip-bottom" data-tip="打印变量 (print:)" data-tour="tool-print">
-        <button class="btn btn-sm btn-ghost btn-square" type="button" @click="openSyntaxBuilder('print')">
-          <Icon icon="mdi:code-json" class="text-lg" />
-        </button>
-      </div>
+        <div class="inline md:tooltip tooltip-bottom" data-tip="打印变量 (print:)" data-tour="tool-print">
+          <button class="btn btn-sm btn-ghost btn-square" type="button" @click="openSyntaxBuilder('print')">
+            <Icon icon="mdi:code-json" class="text-lg" />
+          </button>
+        </div>
 
-      <div class="md:tooltip tooltip-bottom" data-tip="插入成就 (point: 名称|描述)" data-tour="tool-point">
-        <button class="btn btn-sm btn-ghost btn-square" type="button" @click="openSyntaxBuilder('point')">
-          <Icon icon="mdi:star-circle" class="text-lg" />
-        </button>
-      </div>
+        <div class="inline md:tooltip tooltip-bottom" data-tip="插入成就 (point: 名称|描述)" data-tour="tool-point">
+          <button class="btn btn-sm btn-ghost btn-square" type="button" @click="openSyntaxBuilder('point')">
+            <Icon icon="mdi:star-circle" class="text-lg" />
+          </button>
+        </div>
 
-      <div class="md:tooltip tooltip-bottom" data-tip="插入结局 (end: 名称|描述)" data-tour="tool-end">
-        <button class="btn btn-sm btn-ghost btn-square" type="button" @click="openSyntaxBuilder('end')">
-          <Icon icon="mdi:flag-checkered" class="text-lg" />
-        </button>
-      </div>
-
-      <div class="divider divider-horizontal my-1 mx-0.5"></div>
-
-      <div class="md:tooltip tooltip-bottom" data-tip="粗体 ''文字''" data-tour="tool-format">
-        <button class="btn btn-sm btn-ghost btn-square" type="button" @click="wrapSelection(`''`, `''`)">
-          <Icon icon="mdi:format-bold" class="text-lg" />
-        </button>
-      </div>
-
-      <div class="md:tooltip tooltip-bottom" data-tip="斜体 //文字//">
-        <button class="btn btn-sm btn-ghost btn-square" type="button" @click="wrapSelection(`//`, `//`)">
-          <Icon icon="mdi:format-italic" class="text-lg" />
-        </button>
-      </div>
-
-      <div class="md:tooltip tooltip-bottom" data-tip="删除线 ~~文字~~">
-        <button class="btn btn-sm btn-ghost btn-square" type="button" @click="wrapSelection(`~~`, `~~`)">
-          <Icon icon="mdi:format-strikethrough" class="text-lg" />
-        </button>
-      </div>
-
-      <div class="md:tooltip tooltip-bottom" data-tip="上标 ^^文字^^">
-        <button class="btn btn-sm btn-ghost btn-square" type="button" @click="wrapSelection(`^^`, `^^`)">
-          <Icon icon="mdi:format-superscript" class="text-lg" />
-        </button>
-      </div>
-
-      <div class="md:tooltip tooltip-bottom" data-tip="下标 ,,文字,,">
-        <button class="btn btn-sm btn-ghost btn-square" type="button" @click="wrapSelection(',,', ',,')">
-          <Icon icon="mdi:format-subscript" class="text-lg" />
-        </button>
+        <div class="inline md:tooltip tooltip-bottom" data-tip="插入结局 (end: 名称|描述)" data-tour="tool-end">
+          <button class="btn btn-sm btn-ghost btn-square" type="button" @click="openSyntaxBuilder('end')">
+            <Icon icon="mdi:flag-checkered" class="text-lg" />
+          </button>
+        </div>
       </div>
 
       <div class="divider divider-horizontal my-1 mx-0.5"></div>
 
-      <div class="md:tooltip tooltip-bottom" data-tip="嵌入段落 (display:)" data-tour="tool-display">
-        <button class="btn btn-sm btn-ghost btn-square" type="button" @click="openSyntaxBuilder('display')">
-          <Icon icon="mdi:file-replace-outline" class="text-lg" />
-        </button>
+      <div class="inline md:inline-flex flex-wrap" data-tour="editor-style-tools">
+        <div class="inline md:tooltip tooltip-bottom" data-tip="粗体 ''文字''" data-tour="tool-format">
+          <button class="btn btn-sm btn-ghost btn-square" type="button" @click="wrapSelection(`''`, `''`)">
+            <Icon icon="mdi:format-bold" class="text-lg" />
+          </button>
+        </div>
+
+        <div class="inline md:tooltip tooltip-bottom" data-tip="斜体 //文字//" data-tour="tool-format-italic">
+          <button class="btn btn-sm btn-ghost btn-square" type="button" @click="wrapSelection(`//`, `//`)">
+            <Icon icon="mdi:format-italic" class="text-lg" />
+          </button>
+        </div>
+
+        <div class="inline md:tooltip tooltip-bottom" data-tip="删除线 ~~文字~~" data-tour="tool-format-strikethrough">
+          <button class="btn btn-sm btn-ghost btn-square" type="button" @click="wrapSelection(`~~`, `~~`)">
+            <Icon icon="mdi:format-strikethrough" class="text-lg" />
+          </button>
+        </div>
+
+        <div class="inline md:tooltip tooltip-bottom" data-tip="上标 ^^文字^^" data-tour="tool-format-superscript">
+          <button class="btn btn-sm btn-ghost btn-square" type="button" @click="wrapSelection(`^^`, `^^`)">
+            <Icon icon="mdi:format-superscript" class="text-lg" />
+          </button>
+        </div>
+
+        <div class="inline md:tooltip tooltip-bottom" data-tip="下标 ,,文字,," data-tour="tool-format-subscript">
+          <button class="btn btn-sm btn-ghost btn-square" type="button" @click="wrapSelection(',,', ',,')">
+            <Icon icon="mdi:format-subscript" class="text-lg" />
+          </button>
+        </div>
       </div>
 
-      <div class="md:tooltip tooltip-bottom" data-tip="插入全局 JS 函数 (fn:)" data-tour="tool-fn">
-        <button class="btn btn-sm btn-ghost btn-square" type="button" @click="openSyntaxBuilder('fn')">
-          <Icon icon="mdi:code-braces" class="text-lg" />
-        </button>
-      </div>
+      <div class="divider divider-horizontal my-1 mx-0.5"></div>
+      <div class="inline md:inline-flex flex-wrap" data-tour="editor-function-tools">
+        <div class="inline md:tooltip tooltip-bottom" data-tip="嵌入段落 (display:)" data-tour="tool-display">
+          <button class="btn btn-sm btn-ghost btn-square" type="button" @click="openSyntaxBuilder('display')">
+            <Icon icon="mdi:file-replace-outline" class="text-lg" />
+          </button>
+        </div>
 
-      <div class="md:tooltip tooltip-bottom" data-tip="调用 JS 函数 (call:)" data-tour="tool-call">
-        <button class="btn btn-sm btn-ghost btn-square" type="button" @click="openSyntaxBuilder('call')">
-          <Icon icon="mdi:play-circle-outline" class="text-lg" />
-        </button>
-      </div>
+        <div class="inline md:tooltip tooltip-bottom" data-tip="插入全局 JS 函数 (fn:)" data-tour="tool-fn">
+          <button class="btn btn-sm btn-ghost btn-square" type="button" @click="openSyntaxBuilder('fn')">
+            <Icon icon="mdi:code-braces" class="text-lg" />
+          </button>
+        </div>
 
-      <div class="md:tooltip tooltip-bottom" data-tip="插入 CSS 样式块 <style>" data-tour="tool-style">
-        <button class="btn btn-sm btn-ghost btn-square" type="button" @click="openSyntaxBuilder('style')">
-          <Icon icon="mdi:language-css3" class="text-lg" />
-        </button>
+        <div class="inline md:tooltip tooltip-bottom" data-tip="调用 JS 函数 (call:)" data-tour="tool-call">
+          <button class="btn btn-sm btn-ghost btn-square" type="button" @click="openSyntaxBuilder('call')">
+            <Icon icon="mdi:play-circle-outline" class="text-lg" />
+          </button>
+        </div>
+
+        <div class="inline md:tooltip tooltip-bottom" data-tip="插入 CSS 样式块 <style>" data-tour="tool-style">
+          <button class="btn btn-sm btn-ghost btn-square" type="button" @click="openSyntaxBuilder('style')">
+            <Icon icon="mdi:language-css3" class="text-lg" />
+          </button>
+        </div>
       </div>
-      <div class="md:tooltip tooltip-bottom" data-tip="显示语法说明书" data-tour="tool-manual">
+      <div class="divider divider-horizontal my-1 mx-0.5"></div>
+      <div class="inline md:tooltip tooltip-bottom" data-tip="显示语法说明书" data-tour="tool-manual">
         <button class="btn btn-sm btn-ghost btn-square" type="button" @click="$emit('show-manual')">
           <Icon icon="mdi:book-open-variant" class="text-lg" />
-        </button>
-      </div>
-      <div class="divider divider-horizontal my-1 mx-0.5"></div>
-      <div class="md:tooltip tooltip-bottom" data-tip="初始化语法示例" data-tour="tool-init">
-        <button class="btn btn-sm btn-ghost btn-square" type="button" @click="$emit('init-default')">
-          <Icon icon="mdi:play-circle-outline" class="text-lg" />
         </button>
       </div>
     </div>
 
     <div class="mb-2 flex items-center justify-between px-3">
-      <div class="flex items-center gap-2">
+        <div class="flex items-center gap-2">
         <label class="text-sm font-bold flex items-center gap-1">
           <Icon icon="mdi:square-edit-outline" class="text-base text-primary" />
           <span>段落编辑</span>
         </label>
-        <span class="badge badge-neutral badge-sm font-mono">{{ selectedPassage }}</span>
+
+        <InputSelector
+          v-model="selectedPassage"
+          :options="passageNames"
+          @change="$emit('update:selectedPassage', $event)"
+          placeholder="搜索段落..."
+        />
       </div>
       <div class="flex items-center gap-1">
         <div class="md:tooltip tooltip-bottom" data-tip="重命名当前段落">
@@ -363,15 +369,14 @@ import 'codemirror/addon/mode/simple';
 const props = defineProps<{
   readOnly?: boolean;
   story: any;
-  selectedPassage: string;
-  content: string;
   tagEditValue: string;
   variables: Record<string, unknown>;
 }>();
 
+const selectedPassage = defineModel<string>('selectedPassage', { required: true });
+const content = defineModel<string>('content', { required: true });
+
 const emits = defineEmits([
-  'update:content',
-  'update:selectedPassage',
   'update:tagEditValue',
   'update:variables',
   'paste-import',
@@ -435,6 +440,8 @@ const syntaxForm = ref({
 
 const localTagEdit = ref(props.tagEditValue || '');
 
+const passageNames = computed(() => (props.story?.passages || []).map((p: any) => p.name));
+
 const syntaxBuilderTitle = computed(() => {
   const map: Record<SyntaxToolKind, string> = {
     link: '插入链接',
@@ -466,7 +473,7 @@ watch(
 );
 
 watch(
-  () => props.content,
+  () => content.value,
   (v) => {
     if (!storyCmInstance) return;
     const cur = storyCmInstance.getValue();
@@ -475,11 +482,11 @@ watch(
 );
 
 watch(
-  () => props.selectedPassage,
+  selectedPassage,
   async () => {
     await nextTick();
     if (!storyCmInstance) return;
-    const expected = props.content || '';
+    const expected = content.value || '';
     const cur = storyCmInstance.getValue();
     if (cur !== expected) storyCmInstance.setValue(expected);
   },
@@ -503,14 +510,14 @@ onBeforeUnmount(() => {
 
 // initialize CodeMirror when mounted/updated
 watch(
-  () => [props.readOnly, props.story && props.selectedPassage],
+  () => [props.readOnly, props.story && selectedPassage.value],
   async () => {
     await nextTick();
     const ta = storyCmTextarea.value || (document.querySelector('textarea[data-cm="story"]') as HTMLTextAreaElement | null);
     if (!ta) return;
     const theme = 'dracula';
     if (!storyCmInstance) {
-      ta.value = props.content || '';
+      ta.value = content.value || '';
       storyCmInstance = CodeMirror.fromTextArea(ta, {
         mode: 'haideStory',
         theme,
@@ -523,7 +530,7 @@ watch(
       storyCmInstance.setSize('100%', '420px');
       storyCmInstance.on('change', (cm: any) => {
         const v = cm.getValue();
-        emits('update:content', v);
+        content.value = v;
       });
       storyCmInstance.setOption('readOnly', props.readOnly ? 'nocursor' : false);
     } else {
@@ -554,7 +561,7 @@ function insertSnippet(snippet: string) {
 }
 
 function getDefaultPassageName() {
-  return props.selectedPassage || props.story?.startPassage || props.story?.passages?.[0]?.name || 'Start';
+  return selectedPassage.value || props.story?.startPassage || props.story?.passages?.[0]?.name || 'Start';
 }
 
 function normalizeVarName(raw: string, fallback = 'var') {

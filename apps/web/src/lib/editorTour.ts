@@ -16,10 +16,52 @@ export const EDITOR_TOUR_STEPS: TourStep[] = [
     placement: "bottom",
   },
   {
-    target: '[data-tour="btn-tour"]',
-    title: "编辑器引导",
-    description: "随时点这个问号，可以再看一遍这份引导。",
+    target: '[data-tour="passage-list"]',
+    title: "段落列表",
+    description:
+      "左侧管理所有段落，支持按名称或标签搜索。段落名右侧的小图标可以复制名字，粘贴到 (display:) 或链接里很方便。",
+    placement: "right",
+  },
+  {
+    target: '[data-tour="editor-syntax-tools"]',
+    title: "常用语法工具",
+    description:
+      "常用语法一键插入：链接、条件分支、变量、成就、结局。",
     placement: "bottom",
+  },
+  {
+    target: '[data-tour="editor-style-tools"]',
+    title: "样式工具",
+    description:
+      "一些文本样式工具：粗体、斜体、删除线、上标、下标。可以选中文本后点击按钮应用样式。",
+    placement: "bottom",
+  },
+  {
+    target: '[data-tour="editor-function-tools"]',
+    title: "功能性语法工具",
+    description:
+      "一些功能性语法工具：嵌入段落、JS 函数、样式块。",
+    placement: "bottom",
+  },
+  {
+    target: '[data-tour="tool-manual"]',
+    title: "语法说明书",
+    description: "完整的宏语法和示例都在这里，忘了写法随时翻开看。",
+    placement: "bottom",
+  },
+  {
+    target: '[data-tour="passage-editor"]',
+    title: "正文编辑区",
+    description:
+      "用 Tellory 语法书写正文，下方可以给当前段落打标签，方便在列表里搜索。",
+    placement: "right",
+  },
+  {
+    target: '[data-tour="right-panel"]',
+    title: "预览与变量",
+    description:
+      "右侧实时渲染当前段落，切换标签页可以查看变量、已获得的成就和已达成的结局。",
+    placement: "left",
   },
   {
     target: '[data-tour="btn-paste"]',
@@ -68,95 +110,10 @@ export const EDITOR_TOUR_STEPS: TourStep[] = [
     placement: "bottom",
   },
   {
-    target: '[data-tour="passage-list"]',
-    title: "段落列表",
-    description:
-      "左侧管理所有段落，支持按名称或标签搜索。段落名右侧的小图标可以复制名字，粘贴到 (display:) 或链接里很方便。",
-    placement: "right",
-  },
-  {
-    target: '[data-tour="editor-tools"]',
-    title: "编辑工具条",
-    description:
-      "常用语法一键插入：链接、条件分支、变量、成就、结局、粗体斜体、嵌入段落、样式块。不确定写法时当参考也行。",
+    target: '[data-tour="btn-tour"]',
+    title: "编辑器引导",
+    description: "随时点这个问号，可以再看一遍这份引导。",
     placement: "bottom",
-  },
-  {
-    target: '[data-tour="tool-link"]',
-    title: "插入链接",
-    description:
-      "[[目标段落|显示文字]] 会生成一条跳转链接，省略显示文字就直接用段落名。这是分支剧情最基本的写法。",
-    placement: "bottom",
-  },
-  {
-    target: '[data-tour="tool-if"]',
-    title: "条件分支",
-    description: "(if: 条件)[ 分支一 ](else:)[ 分支二 ] 按变量的值走不同剧情。",
-    placement: "bottom",
-  },
-  {
-    target: '[data-tour="tool-set"]',
-    title: "变量赋值",
-    description:
-      "(set: $变量 to 值) 用来记录玩家的选择、好感度、道具。变量名以 $ 开头。",
-    placement: "bottom",
-  },
-  {
-    target: '[data-tour="tool-print"]',
-    title: "输出文本",
-    description: "(print: ) 用来在故事中输出文本内容。",
-    placement: "bottom",
-  },
-  {
-    target: '[data-tour="tool-point"]',
-    title: "成就标记",
-    description: "(point: ) 用来在故事中标记成就，玩家达成条件后会触发相应的成就。可以直接放在段落中，也可以放在条件分支里。",
-    placement: "bottom",
-  },
-  {
-    target: '[data-tour="tool-end"]',
-    title: "故事结局",
-    description: "(end: ) 用来标记故事的结局，玩家到达该段落时触发。没有出口的段落若不用于嵌入都应加上结局标记。",
-    placement: "bottom",
-  },
-  {
-    target: '[data-tour="tool-display"]',
-    title: "嵌入段落",
-    description: "(display:) 将某个段落嵌入到当前段落中，也可以根据条件决定是否嵌入该段落。",
-    placement: "bottom",
-  },
-  {
-    target: '[data-tour="tool-fn"]',
-    title: "JS 函数",
-    description:
-      "(fn:) 定义函数、(call:) 调用它。掷骰子、随机数、复杂计算都可以交给 JavaScript。",
-    placement: "bottom",
-  },
-  {
-    target: '[data-tour="tool-style"]',
-    title: "样式块",
-    description: "可以插入 <style> 标签用来定义样式块，可以在段落中嵌入自定义样式。同时也支持写常规的 html 代码(不包含表单)。",
-    placement: "bottom",
-  },
-  {
-    target: '[data-tour="tool-manual"]',
-    title: "语法说明书",
-    description: "完整的宏语法和示例都在这里，忘了写法随时翻开看。",
-    placement: "bottom",
-  },
-  {
-    target: '[data-tour="passage-editor"]',
-    title: "正文编辑区",
-    description:
-      "用 Tellory 语法书写正文，下方可以给当前段落打标签，方便在列表里搜索。",
-    placement: "right",
-  },
-  {
-    target: '[data-tour="right-panel"]',
-    title: "预览与变量",
-    description:
-      "右侧实时渲染当前段落，切换标签页可以查看变量、已获得的成就和已达成的结局。",
-    placement: "left",
   },
   {
     title: "可以开始了",
