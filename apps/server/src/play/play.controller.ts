@@ -18,11 +18,19 @@ import { StoryRuntimeService } from '../stories/story-runtime.service';
 
 @Controller('play')
 export class PlayController {
+  private readonly playService: PlayService;
+  private readonly storiesService: StoriesService;
+  private readonly storyRuntimeService: StoryRuntimeService;
+
   constructor(
-    private readonly playService: PlayService,
-    private readonly storiesService: StoriesService,
-    private readonly storyRuntimeService: StoryRuntimeService,
-  ) {}
+    playService: PlayService,
+    storiesService: StoriesService,
+    storyRuntimeService: StoryRuntimeService,
+  ) {
+    this.playService = playService;
+    this.storiesService = storiesService;
+    this.storyRuntimeService = storyRuntimeService;
+  }
 
   @UseGuards(OptionalAuthGuard)
   @Get('unlocks/:userId')
@@ -41,7 +49,7 @@ export class PlayController {
 
   @Get('story/:id')
   @UseGuards(JwtAuthGuard)
-  async getApprovedStory(@Param('id') id: string, @Request() req) {
+  async getApprovedStory(@Param('id') id: string) {
     const p = await this.storiesService.findApprovedOne(id);
     if (!p) {
       throw new Error('故事不存在');
@@ -76,6 +84,7 @@ export class PlayController {
           to: runtime.passage,
           action: 'start',
           at: Date.now(),
+          variables: runtime.variables || {},
         },
       ],
       dataset: runtime.dataset,
@@ -116,6 +125,50 @@ export class PlayController {
     if (!p || p.storyId !== id) return null;
     if (p.userId && p.userId !== req.user.userId)
       throw new Error('无权修改该游玩记录');
+    const isAuthorOrAdmin =
+      p.userId === req.user?.userId || req.user?.isAdmin || false;
+
+    if (dto.back) {
+      const prevHistory = p.history || [];
+      if (prevHistory.length <= 1) {
+        return {
+          ...p,
+          variables: isAuthorOrAdmin ? p.variables || {} : {},
+          history: prevHistory,
+        };
+      }
+
+      const rollbackHistory = prevHistory.slice(0, -1);
+      const rollbackTo = rollbackHistory[rollbackHistory.length - 1];
+      const displayedPassages = rollbackHistory
+        .map((item) => this.extractDisplayTarget(item.action))
+        .filter((item): item is string => Boolean(item));
+
+      const runtimeRes = this.storyRuntimeService.rollback(
+        p.dataset ?? '',
+        rollbackTo?.to || p.currentPassage,
+        (rollbackTo?.variables || p.variables || {}) as Record<string, unknown>,
+        displayedPassages,
+      );
+
+      const updated = await this.playService.update(p.id, {
+        currentPassage: runtimeRes.passage,
+        variables: runtimeRes.variables as any,
+        history: rollbackHistory,
+        dataset: runtimeRes.dataset,
+        html: runtimeRes.html,
+        isEnding: false,
+      });
+      if (!updated) return null;
+
+      return {
+        ...updated,
+        variables: isAuthorOrAdmin ? updated.variables || {} : {},
+        history: updated.history || [],
+        html: runtimeRes.html,
+        end: null,
+      };
+    }
 
     // If runtime action provided, execute via runtime service
     if (dto.target || dto.action || dto.display) {
@@ -136,15 +189,18 @@ export class PlayController {
         dto.display || '',
       );
 
+      const historyAction = decodedAction?.trim()
+        ? decodedAction
+        : decodedDisplay?.trim()
+          ? `display:${decodedDisplay}`
+          : `goto:${decodedTarget}`;
+
       const entry = {
         from: p.currentPassage,
         to: runtimeRes.passage,
-        action:
-          decodedAction ??
-          (decodedDisplay
-            ? `display:${decodedDisplay}`
-            : `goto:${decodedTarget}`),
+        action: historyAction,
         at: Date.now(),
+        variables: runtimeRes.variables as any,
       };
       const newHistory = [...prevHistory, entry];
       let isEnding = false;
@@ -206,9 +262,6 @@ export class PlayController {
         isEnding,
       });
       if (!updated) return null;
-
-      const isAuthorOrAdmin =
-        p.userId === req.user?.userId || req.user?.isAdmin || false;
       return {
         ...updated,
         variables: isAuthorOrAdmin ? updated.variables || {} : {},
@@ -218,6 +271,12 @@ export class PlayController {
       };
     }
     throw new Error('缺少交互目标或动作');
+  }
+
+  private extractDisplayTarget(action: string): string | null {
+    if (!action?.startsWith('display:')) return null;
+    const target = action.slice('display:'.length).trim();
+    return target || null;
   }
 
   @UseGuards(JwtAuthGuard)

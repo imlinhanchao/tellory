@@ -100,6 +100,39 @@ export class StoryRuntimeService {
     return this.renderAndSeal(state, Boolean(target), decodedAction);
   }
 
+  rollback(
+    dataset: string,
+    passage: string,
+    variables: Variables,
+    displayedPassages: string[] = [],
+  ): RuntimeResponse {
+    const state = this.decryptDataset(dataset);
+    const targetPassage = passage.trim();
+    this.getPassage(state, targetPassage);
+    state.currentPassage = targetPassage;
+    state.variables = { ...variables };
+    state.variables.passage = targetPassage;
+    state.variables.storyTitle = state.title;
+
+    // Keep only unique and valid display passages to avoid corrupted state.
+    state.displayedPassages = Array.from(
+      new Set(
+        displayedPassages.filter((name) => {
+          if (!name) return false;
+          try {
+            this.getPassage(state, name);
+            return true;
+          } catch {
+            return false;
+          }
+        }),
+      ),
+    );
+
+    // We restore to a snapshot, so entry effects must not run again.
+    return this.renderAndSeal(state, false);
+  }
+
   private renderAndSeal(
     state: RuntimeState,
     applyEntryEffects: boolean,

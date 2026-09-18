@@ -23,6 +23,10 @@ export interface IHistory {
    * 动作发生的时间戳
    */
   at: number;
+  /**
+   * 变量快照
+   */
+  variables?: Record<string, any>;
 }
 
 @Entity({ name: 'story_play', comment: '玩家游玩会话/进度' })

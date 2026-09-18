@@ -24,8 +24,17 @@
         </div>
 
         <div class="flex items-center gap-1">
-            <button
-
+          <button
+            v-if="canUndo"
+            class="btn btn-ghost btn-xs gap-1 hover:text-base-content"
+            title="撤销上一步"
+            :disabled="undoing"
+            @click="undo"
+          >
+            <Icon icon="mdi:undo-variant" class="size-3.5" />
+            <span>{{ undoing ? "撤销中" : "撤销" }}</span>
+          </button>
+          <button
             class="btn btn-ghost btn-xs gap-1 hover:text-base-content"
             title="重新开始"
             @click="showRestartConfirm = true"
@@ -351,6 +360,7 @@ const showEndUnlockFx = ref(false);
 const unlockedEnding = ref<IEndingUnlock | null>(null);
 const isEnding = ref(false);
 const sceneRenderKey = ref(0);
+const undoing = ref(false);
 
 // Inspector state (测试模式)
 const inspectorDrawerOpen = ref(false);
@@ -395,6 +405,11 @@ async function copySelectedValue() {
 const authorName = computed(
   () =>
     story.value?.author?.nickname || story.value?.author?.username || "佚名",
+);
+const canUndo = computed(
+  () =>
+    Array.isArray(play.value?.history) &&
+    (play.value?.history?.length || 0) > 1,
 );
 
 watch(
@@ -481,6 +496,30 @@ async function confirmRestart() {
   currentHtml.value = res.html || "";
   isEnding.value = false;
   variables.value = {};
+}
+
+async function undo() {
+  if (!canUndo.value || undoing.value) return;
+  undoing.value = true;
+  try {
+    const res = (await updatePlay(storyId.value, {
+      back: true,
+    })) as IUpdatePlayResponse;
+    play.value = res as any;
+    if (res.html) {
+      applySceneHtml(res.html, true);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+    variables.value = res.variables || {};
+    isEnding.value = !!res.isEnding;
+    showEndUnlockFx.value = false;
+    unlockedEnding.value = null;
+  } catch (err) {
+    Message.error("撤销失败，请稍后再试");
+    console.error("[PlayView] undo failed", err);
+  } finally {
+    undoing.value = false;
+  }
 }
 
 function applySceneHtml(nextHtml: string, withPageTurn: boolean) {

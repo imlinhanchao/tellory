@@ -1,7 +1,11 @@
-import { IsOptional, IsString } from 'class-validator';
+import { IsBoolean, IsOptional, IsString } from 'class-validator';
 import { BaseStoryFields } from '../stories/base-story.entity';
 
 export class UpdatePlayDto {
+  @IsOptional()
+  @IsBoolean()
+  back?: boolean;
+
   @IsOptional()
   @IsString()
   target?: string;

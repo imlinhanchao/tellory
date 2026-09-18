@@ -27,7 +27,7 @@ export interface IUpdatePlayResponse {
 
 export async function updatePlay(
   storyId: string,
-  body: { target?: string; action?: string; display?: string },
+  body: { target?: string; action?: string; display?: string; back?: boolean },
 ) {
   return request.put<IUpdatePlayResponse>({
     url: `/play/${storyId}`,
