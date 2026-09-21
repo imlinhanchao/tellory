@@ -16,6 +16,7 @@ import { AdminGuard } from '../auth/admin.guard';
 import { StoriesService } from './stories.service';
 import { StoryDto, RejectDto } from './stories.dto';
 import { StoryRuntimeService } from './story-runtime.service';
+import { getDomain } from 'src/utils';
 
 @Controller('stories')
 export class StoriesController {
@@ -103,7 +104,8 @@ export class StoriesController {
   @UseGuards(JwtAuthGuard)
   @Put(':id/publish')
   async publish(@Param('id') id: string, @Request() req) {
-    return this.storiesService.publish(id, req.user.userId);
+    const domain = getDomain(req);
+    return this.storiesService.publish(id, req.user.userId, domain);
   }
 
   // 管理员：列出待审核的故事（未发布）
@@ -127,7 +129,8 @@ export class StoriesController {
   @Post(':id/approve')
   async approve(@Param('id') id: string, @Request() req) {
     const adminId = req.user.userId;
-    return this.storiesService.approve(id, adminId);
+    const domain = getDomain(req);
+    return this.storiesService.approve(id, adminId, domain);
   }
 
   // 管理员拒绝投稿
@@ -139,7 +142,8 @@ export class StoriesController {
     @Request() req,
   ) {
     const adminId = req.user.userId;
-    return this.storiesService.reject(id, adminId, body?.reason);
+    const domain = getDomain(req);
+    return this.storiesService.reject(id, adminId, body?.reason, domain);
   }
 
   // 管理员下架已审核并上架的故事

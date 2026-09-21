@@ -6,6 +6,8 @@ import { Story } from './story.entity';
 import { ApprovedStory } from './approved-story.entity';
 import { StoryDto } from './stories.dto';
 import { omit } from 'src/utils';
+import { FingerTo } from 'fishpi';
+import { ConfigService } from 'src/config/config.service';
 
 type PublicStory = {
   id: string;
@@ -280,7 +282,46 @@ export class StoriesService {
     return (res.affected ?? 0) > 0;
   }
 
-  async publish(id: string, authorId?: string): Promise<Story | null> {
+  private async sendPublishNotice(
+    story: Story,
+    domain?: string,
+  ): Promise<void> {
+    const config = ConfigService.getConfig();
+    if (!config?.noticeGoldenKey || !config?.noticeUsers) {
+      return;
+    }
+
+    try {
+      const author = story.authorId
+        ? await this.usersService.findById(story.authorId)
+        : null;
+      const authorName = author?.username || author?.nickname || '未知用户';
+      const origin = domain || process.env.DOMAIN || '';
+      const reviewUrl = origin ? `${origin}/#/admin/reviews/${story.id}` : '';
+      const reviewText = reviewUrl ? `[待审核](${reviewUrl})` : '待审核';
+      const message = `用户 ${authorName} 提交了新故事《${story.title || '未命名'}》${reviewText}`;
+
+      const noticeFinger = FingerTo(config.noticeGoldenKey);
+      const users = config.noticeUsers
+        .split(/[,，]/)
+        .map((u: string) => u.trim())
+        .filter(Boolean);
+
+      for (const username of users) {
+        noticeFinger.sendNotice(username, message).catch((err) => {
+          console.error(`向用户 ${username} 发送提审通知失败:`, err);
+        });
+      }
+    } catch (e) {
+      console.error('发送提审通知异常:', e);
+    }
+  }
+
+  async publish(
+    id: string,
+    authorId?: string,
+    domain?: string,
+  ): Promise<Story | null> {
     const story = await this.findById(id, false);
     if (!story) return null;
     if (authorId && story.authorId !== authorId)
@@ -290,11 +331,60 @@ export class StoriesService {
     story.submittedAt = Date.now();
     story.updatedAt = Date.now();
     await this.storiesRepo.save(story);
+    await this.sendPublishNotice(story, domain);
     return story;
   }
 
+  private async sendReviewNotice(
+    story: Story,
+    status: 'approved' | 'rejected',
+    reason?: string,
+    domain?: string,
+  ): Promise<void> {
+    const config = ConfigService.getConfig();
+    if (!config?.noticeGoldenKey) {
+      return;
+    }
+
+    try {
+      const author = story.authorId
+        ? await this.usersService.findById(story.authorId)
+        : null;
+
+      if (author?.from !== 'fishpi' || !author?.username) {
+        return;
+      }
+
+      const key = story.shortname || story.id;
+      const title = story.title || '未命名';
+      let message = '';
+
+      if (status === 'approved') {
+        const storyUrl = domain ? `${domain}/#/play/${key}` : '';
+        const storyLink = storyUrl ? `[${title}](${storyUrl})` : title;
+        message = `您的故事《${storyLink}》已通过审核并上架。`;
+      } else {
+        const storyUrl = domain ? `${domain}/#/story-editor/${key}` : '';
+        const storyLink = storyUrl ? `[${title}](${storyUrl})` : title;
+        const reasonText = reason ? `，评审意见：${reason}` : '';
+        message = `您的故事《${storyLink}》未通过审核${reasonText}。`;
+      }
+
+      const noticeFinger = FingerTo(config.noticeGoldenKey);
+      noticeFinger.sendNotice(author.username, message).catch((err) => {
+        console.error(`向作者 ${author.username} 发送审核结果通知失败:`, err);
+      });
+    } catch (e) {
+      console.error('发送审核结果通知异常:', e);
+    }
+  }
+
   /** 管理员审核并上架：创建 ApprovedStory 快照并将 story 标记为已发布 */
-  async approve(id: string, adminId: string): Promise<ApprovedStory | null> {
+  async approve(
+    id: string,
+    adminId: string,
+    domain?: string,
+  ): Promise<ApprovedStory | null> {
     const story = await this.findById(id, false);
     if (!story) return null;
     await this.assertApprovedShortnameAvailable(story.shortname, story.id);
@@ -320,6 +410,7 @@ export class StoriesService {
     const existing = await this.approvedRepo.findOne({
       where: { sourceStoryId: story.id },
     });
+    let result: ApprovedStory;
     if (existing) {
       existing.title = approved.title;
       existing.description = approved.description;
@@ -330,10 +421,13 @@ export class StoriesService {
       existing.authorId = approved.authorId;
       existing.approvedBy = approved.approvedBy;
       existing.approvedAt = approved.approvedAt;
-      return this.approvedRepo.save(existing);
+      result = await this.approvedRepo.save(existing);
+    } else {
+      result = await this.approvedRepo.save(approved);
     }
 
-    return this.approvedRepo.save(approved);
+    await this.sendReviewNotice(story, 'approved', undefined, domain);
+    return result;
   }
 
   /** 管理员拒绝投稿，保存原因并标记状态 */
@@ -341,6 +435,7 @@ export class StoriesService {
     id: string,
     adminId: string,
     reason?: string,
+    domain?: string,
   ): Promise<Story | null> {
     const story = await this.findById(id, false);
     if (!story) return null;
@@ -349,6 +444,7 @@ export class StoriesService {
     story.reviewerId = adminId;
     story.updatedAt = Date.now();
     await this.storiesRepo.save(story);
+    await this.sendReviewNotice(story, 'rejected', reason, domain);
     return story;
   }
 

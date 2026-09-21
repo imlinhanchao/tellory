@@ -17,6 +17,7 @@ import { AuthService } from './auth.service';
 import Fishpi from 'fishpi';
 import { ApiTags } from '@nestjs/swagger';
 import { ConfigService } from 'src/config/config.service';
+import { getDomain, getHost } from '../utils';
 
 export interface IRegisterBody {
   username: string;
@@ -64,9 +65,7 @@ export class AuthController {
     @Request() req: ExpressRequest,
   ) {
     if (!body?.email) throw new Error('email 不能为空');
-    const domain = new URL(
-      req.headers.referer || `${req.protocol}://${req.headers.host}`,
-    ).origin;
+    const domain = getDomain(req);
 
     return await this.authService.resendVerification(body.email, domain);
   }
@@ -85,9 +84,7 @@ export class AuthController {
     @Response({ passthrough: true }) res: ExpressResponse,
   ) {
     const fishpi = new Fishpi();
-    const domain = new URL(
-      req.headers.referer || `${req.protocol}://${req.headers.host}`,
-    ).origin;
+    const domain = getDomain(req);
     res.redirect(fishpi.generateAuthURL(domain + '/#/login/fishpi'));
   }
 
@@ -111,17 +108,13 @@ export class AuthController {
     @Request() req: ExpressRequest,
     @Response({ passthrough: true }) res: ExpressResponse,
   ) {
-    const domain = new URL(
-      req.headers.referer || `${req.protocol}://${req.headers.host}`,
-    ).host;
+    const domain = getHost(req);
     res.redirect(GitHub.getAuthUrl(domain));
   }
 
   @Post('login/github')
   async authGithub(@Request() req: ExpressRequest, @Body() body) {
-    const domain = new URL(
-      req.headers.referer || `${req.protocol}://${req.headers.host}`,
-    ).host;
+    const domain = getHost(req);
     const clientId = this.configService.get('github')?.clientId;
     if (!clientId) throw new Error('GitHub OAuth 未配置，请联系管理员');
     if (body['code']) {
@@ -137,9 +130,7 @@ export class AuthController {
     @Response({ passthrough: true }) res: ExpressResponse,
     @Query() query,
   ) {
-    const domain = new URL(
-      req.headers.referer || `${req.protocol}://${req.headers.host}`,
-    ).host;
+    const domain = getHost(req);
     if (query['openid.mode'] === 'id_res') {
       const steamid = await Steam.verify(query);
       if (steamid) {

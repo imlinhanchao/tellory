@@ -26,6 +26,8 @@ export interface ConfigData {
     pass?: string;
     from?: string;
   };
+  noticeGoldenKey?: string;
+  noticeUsers?: string;
 }
 
 export interface ConfigStatus {

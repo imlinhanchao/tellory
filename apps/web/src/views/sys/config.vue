@@ -306,6 +306,39 @@
           </div>
         </div>
 
+        <!-- 摸鱼派配置（可选） -->
+        <div class="space-y-4 grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div
+            class="divider col-span-2 text-xs font-bold opacity-50 uppercase tracking-wider"
+          >
+            摸鱼派配置（可选）
+          </div>
+
+          <div class="form-control w-full">
+            <label class="label px-1">
+              <span class="text-xs font-bold opacity-60 uppercase">通知金手指</span>
+            </label>
+            <input
+              v-model="config.noticeGoldenKey"
+              type="text"
+              placeholder="请输入通知金手指密钥"
+              class="input input-bordered w-full"
+            />
+          </div>
+
+          <div class="form-control w-full">
+            <label class="label px-1">
+              <span class="text-xs font-bold opacity-60 uppercase">通知用户列表</span>
+            </label>
+            <input
+              v-model="config.noticeUsers"
+              type="text"
+              placeholder="请输入通知用户列表，逗号分隔"
+              class="input input-bordered w-full"
+            />
+          </div>
+        </div>
+
         <!-- 错误信息 -->
         <div v-if="error" class="alert alert-error rounded-xl shadow-lg">
           <Icon icon="mdi:alert-circle-outline" class="h-6 w-6" />
@@ -364,6 +397,8 @@ const config = ref<ConfigData>({
     pass: "",
     from: "",
   },
+  noticeGoldenKey: "",
+  noticeUsers: "",
 });
 
 const loading = ref(false);
