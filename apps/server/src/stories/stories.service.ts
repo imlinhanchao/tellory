@@ -8,6 +8,7 @@ import { StoryDto } from './stories.dto';
 import { omit } from 'src/utils';
 import { FingerTo } from 'fishpi';
 import { ConfigService } from 'src/config/config.service';
+import { isMailConfigured, sendStoryApprovedMail } from '../lib/mail';
 
 type PublicStory = {
   id: string;
@@ -342,38 +343,62 @@ export class StoriesService {
     domain?: string,
   ): Promise<void> {
     const config = ConfigService.getConfig();
-    if (!config?.noticeGoldenKey) {
-      return;
-    }
 
     try {
       const author = story.authorId
         ? await this.usersService.findById(story.authorId)
         : null;
 
-      if (author?.from !== 'fishpi' || !author?.username) {
+      if (!author) {
         return;
       }
 
       const key = story.shortname || story.id;
       const title = story.title || '未命名';
-      let message = '';
+      const siteDomain = domain || process.env.DOMAIN || '';
 
-      if (status === 'approved') {
-        const storyUrl = domain ? `${domain}/#/play/${key}` : '';
-        const storyLink = storyUrl ? `[${title}](${storyUrl})` : title;
-        message = `您的故事《${storyLink}》已通过审核并上架。`;
-      } else {
-        const storyUrl = domain ? `${domain}/#/story-editor/${key}` : '';
-        const storyLink = storyUrl ? `[${title}](${storyUrl})` : title;
-        const reasonText = reason ? `，评审意见：${reason}` : '';
-        message = `您的故事《${storyLink}》未通过审核${reasonText}。`;
+      // 1. 若作者来源为摸鱼派且配置了金手指，发送摸鱼派站内通知
+      if (
+        author.from === 'fishpi' &&
+        author.username &&
+        config?.noticeGoldenKey
+      ) {
+        let message = '';
+        if (status === 'approved') {
+          const storyUrl = siteDomain ? `${siteDomain}/#/play/${key}` : '';
+          const storyLink = storyUrl ? `[${title}](${storyUrl})` : title;
+          message = `您的故事《${storyLink}》已通过审核并上架。`;
+        } else {
+          const storyUrl = siteDomain
+            ? `${siteDomain}/#/story-editor/${key}`
+            : '';
+          const storyLink = storyUrl ? `[${title}](${storyUrl})` : title;
+          const reasonText = reason ? `，评审意见：${reason}` : '';
+          message = `您的故事《${storyLink}》未通过审核${reasonText}。`;
+        }
+
+        const noticeFinger = FingerTo(config.noticeGoldenKey);
+        noticeFinger.sendNotice(author.username, message).catch((err) => {
+          console.error(`向作者 ${author.username} 发送审核结果通知失败:`, err);
+        });
       }
 
-      const noticeFinger = FingerTo(config.noticeGoldenKey);
-      noticeFinger.sendNotice(author.username, message).catch((err) => {
-        console.error(`向作者 ${author.username} 发送审核结果通知失败:`, err);
-      });
+      // 2. 故事审核通过且作者配置了邮箱时，发送邮件通知
+      if (status === 'approved' && author.email && isMailConfigured()) {
+        const playUrl = siteDomain
+          ? `${siteDomain}/#/play/${key}`
+          : `/#/play/${key}`;
+        const authorName = author.nickname || author.username || '创作者';
+        sendStoryApprovedMail({
+          to: author.email,
+          nickname: authorName,
+          title,
+          domain: siteDomain,
+          playUrl,
+        }).catch((err) => {
+          console.error(`向作者 ${author.username} 发送审核通过邮件失败:`, err);
+        });
+      }
     } catch (e) {
       console.error('发送审核结果通知异常:', e);
     }

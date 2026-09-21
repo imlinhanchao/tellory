@@ -10,7 +10,7 @@ import { ConfigService } from 'src/config/config.service';
 import path from 'path';
 import fs from 'fs';
 import { omit } from 'src/utils';
-import nodemailer from 'nodemailer';
+import { sendMail } from '../lib/mail';
 
 @Injectable()
 export class AuthService {
@@ -46,24 +46,12 @@ export class AuthService {
     newUser.isVerified = false;
 
     const account = await this.usersService.save(newUser);
-    const mailConfig = this.configService.get('mail');
 
     const domain = process.env.DOMAIN || 'http://localhost:3000';
     const mailHtml = this.makeVerifyMail({ user: account, token, domain });
 
     try {
-      const transporter = nodemailer.createTransport({
-        host: mailConfig.host,
-        port: mailConfig.port,
-        secure: mailConfig.secure,
-        auth: {
-          user: mailConfig.user,
-          pass: mailConfig.pass,
-        },
-      });
-
-      await transporter.sendMail({
-        from: mailConfig.from,
+      await sendMail({
         to: account.email,
         subject: `[织言·Tellory] 请验证您的电子邮件地址`,
         html: mailHtml,
@@ -95,22 +83,10 @@ export class AuthService {
     );
     if (!updated) throw new Error('设置验证 Token 失败');
 
-    const mailConfig = this.configService.get('mail');
     const mailHtml = this.makeVerifyMail({ user: updated, token, domain });
 
     try {
-      const transporter = nodemailer.createTransport({
-        host: mailConfig.host,
-        port: mailConfig.port,
-        secure: mailConfig.secure,
-        auth: {
-          user: mailConfig.user,
-          pass: mailConfig.pass,
-        },
-      });
-
-      const res = await transporter.sendMail({
-        from: mailConfig.from,
+      const res = await sendMail({
         to: updated.email,
         subject: `[织言·Tellory] 请验证您的电子邮件地址`,
         html: mailHtml,
