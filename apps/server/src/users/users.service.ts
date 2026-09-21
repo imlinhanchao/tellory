@@ -21,6 +21,12 @@ export class UsersService {
     if (account) {
       account.username = user.username;
       account.nickname = user.nickname;
+      if (user.email) {
+        account.email = user.email;
+      }
+      if (user.isVerified) {
+        account.isVerified = user.isVerified;
+      }
       account.isAdmin = user.isAdmin;
       account.avatar = user.avatar;
       account.lastLogin = user.lastLogin;
@@ -113,12 +119,13 @@ export class UsersService {
     return new User({
       username: userInfo.login,
       nickname: userInfo.name,
+      email: userInfo.email,
       isAdmin: false,
       avatar: userInfo.avatar_url,
       lastLogin: Date.now(),
       from: 'github',
       sourceId: userInfo.id,
-      isVerified: true,
+      isVerified: !!userInfo.email,
     });
   }
 

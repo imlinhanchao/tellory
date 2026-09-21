@@ -165,7 +165,7 @@ export class AuthService {
       const userInfo = await this.usersService.getGitHubUser(accessToken);
       if (!userInfo) throw new Error('获取 GitHub 用户信息失败');
       const account = await this.usersService.save(userInfo);
-      const isAdmin = userInfo?.isAdmin;
+      const isAdmin = account?.isAdmin;
       const payload = {
         username: account.username,
         from: account.from,
@@ -178,6 +178,7 @@ export class AuthService {
           id: account.id,
           username: account.username,
           from: account.from,
+          email: account.email,
           isAdmin,
         },
       };
