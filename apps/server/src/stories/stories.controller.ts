@@ -32,11 +32,15 @@ export class StoriesController {
     @Query('limit') limit?: number,
     @Query('authorId') authorId?: string,
     @Query('search') search?: string,
+    @Query('private') isPrivate?: string | number,
   ) {
     const c = createdAt || Date.now();
     const l = limit || 20;
     // 接口传 authorId 且与已认证的用户不一致，则视为公开请求，不返回草稿
-    const isPublicRequest = authorId !== req?.user?.userId;
+    let isPublicRequest = authorId !== req?.user?.userId;
+    if (req?.user?.isAdmin && Number(isPrivate) === 1) {
+      isPublicRequest = false;
+    }
     return this.storiesService.findAll(
       c,
       l,

@@ -118,6 +118,12 @@
             审核中心
           </router-link>
         </li>
+        <li v-if="authStore.isAdmin">
+          <router-link to="/admin/stories">
+            <Icon icon="mdi:book-multiple-outline" class="w-4 h-4" />
+            所有故事
+          </router-link>
+        </li>
         <span class="divider my-0"></span>
         <li>
           <a class="text-error" @click.prevent="handleLogout">

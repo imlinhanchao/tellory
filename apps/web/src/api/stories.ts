@@ -35,6 +35,8 @@ export async function listStories(
     search?: string;
     page?: number;
     limit?: number;
+    createdAt?: number;
+    private?: number;
   } = {},
 ) {
   return request.get<{ data: IStory[]; total: number }>({

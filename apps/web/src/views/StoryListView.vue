@@ -9,12 +9,18 @@
           <div
             class="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center"
           >
-            <Icon icon="mdi:book-open-page-variant" class="w-6 h-6" />
+            <Icon
+              :icon="isAdminView ? 'mdi:book-multiple-outline' : 'mdi:book-open-page-variant'"
+              class="w-6 h-6"
+            />
           </div>
-          <div>
+          <div class="flex items-center gap-2">
             <h2 class="text-xl font-bold text-base-content tracking-tight">
               {{ $route.meta.title }}
             </h2>
+            <span v-if="isAdminView" class="badge badge-primary badge-soft badge-xs">
+              管理员
+            </span>
           </div>
         </section>
 
@@ -61,6 +67,34 @@
       </div>
     </div>
 
+    <!-- 管理员状态筛选栏 -->
+    <div v-if="isAdminView" class="flex flex-wrap items-center gap-1.5">
+      <button
+        v-for="tab in statusTabs"
+        :key="tab.value"
+        type="button"
+        class="btn btn-xs rounded-full transition-colors"
+        :class="
+          statusFilter === tab.value
+            ? 'btn-primary'
+            : 'btn-ghost text-base-content/70 hover:bg-base-200'
+        "
+        @click="statusFilter = tab.value"
+      >
+        <span>{{ tab.label }}</span>
+        <span
+          class="badge badge-xs"
+          :class="
+            statusFilter === tab.value
+              ? 'badge-primary-content bg-white/20'
+              : 'badge-ghost'
+          "
+        >
+          {{ getStatusCount(tab.value) }}
+        </span>
+      </button>
+    </div>
+
     <!-- 初次/搜索加载状态列表 -->
     <div
       v-if="loading && stories.length === 0"
@@ -89,10 +123,10 @@
     <!-- 故事卡片网格 -->
     <div
       class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"
-      v-else-if="stories.length"
+      v-else-if="displayedStories.length"
     >
       <div
-        v-for="s in stories"
+        v-for="s in displayedStories"
         :key="s.id"
         class="card card-compact bg-base-100 border border-base-200/80 shadow-2xs hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 rounded-2xl overflow-hidden flex flex-col justify-between"
       >
@@ -103,11 +137,11 @@
               <div class="flex items-start justify-between gap-3">
                 <h3
                   class="font-bold text-base text-base-content truncate hover:text-primary transition-colors cursor-pointer"
-                  @click="previewStory(s.id!)"
+                  @click="previewStory(storyRouteKey(s), s.status)"
                 >
                   {{ s.title || "未命名" }}
                 </h3>
-                <div v-if="isCurrentUser" class="shrink-0 ml-2">
+                <div v-if="isCurrentUser || isAdminView" class="shrink-0 ml-2">
                   <span class="badge badge-sm" :class="statusClass(s.status)">{{
                     statusLabel(s.status)
                   }}</span>
@@ -216,10 +250,37 @@
                 class="w-4 h-4 text-base-content/70"
               />
             </button>
+            <template v-if="isAdminView">
+              <button
+                v-if="s.status === 'pending'"
+                class="btn btn-primary btn-xs gap-1"
+                @click="router.push({ name: 'admin-review-detail', params: { id: s.id } })"
+                title="审核故事"
+              >
+                <Icon icon="mdi:shield-check-outline" class="w-3.5 h-3.5" />
+                <span>审核</span>
+              </button>
+              <button
+                v-if="s.status === 'published'"
+                class="btn btn-ghost btn-error btn-xs btn-square hover:bg-error/10 hover:text-error"
+                @click="confirmUnpublish(s.id!)"
+                title="下架故事"
+              >
+                <Icon icon="mdi:eye-off-outline" class="w-4 h-4" />
+              </button>
+              <button
+                v-else-if="s.status === 'unpublished'"
+                class="btn btn-ghost btn-success btn-xs btn-square hover:bg-success/10 hover:text-success"
+                @click="confirmRepublish(s.id!)"
+                title="重新上架"
+              >
+                <Icon icon="mdi:eye-outline" class="w-4 h-4" />
+              </button>
+            </template>
             <button
-              v-if="!isCurrentUser"
+              v-if="!isCurrentUser && !isAdminView"
               class="btn btn-primary btn-xs gap-1"
-              @click="previewStory(storyRouteKey(s))"
+              @click="previewStory(storyRouteKey(s), s.status)"
               title="阅读故事"
             >
               <Icon icon="mdi:play" class="w-3.5 h-3.5" />
@@ -227,12 +288,13 @@
             </button>
             <button
               v-else
-              class="btn btn-primary btn-xs gap-1"
-              @click="previewStory(storyRouteKey(s))"
-              title="试读故事"
+              class="btn btn-xs gap-1"
+              :class="s.status === 'published' ? 'btn-primary' : 'btn-outline'"
+              @click="previewStory(storyRouteKey(s), s.status)"
+              :title="(isCurrentUser || (isAdminView && s.status !== 'published')) ? '试读故事' : '阅读故事'"
             >
               <Icon icon="mdi:play" class="w-3.5 h-3.5" />
-              <span>试读</span>
+              <span>{{ (isCurrentUser || (isAdminView && s.status !== 'published')) ? '试读' : '阅读' }}</span>
             </button>
           </div>
         </div>
@@ -257,7 +319,7 @@
           尝试更改搜索关键词或清空搜索条件
         </p>
       </div>
-      <div v-if="query.search" class="pt-2">
+      <div v-if="query.search || (isAdminView && statusFilter !== 'all')" class="pt-2">
         <button class="btn btn-sm btn-ghost gap-1" @click="clearSearch">
           <Icon icon="mdi:refresh" class="w-4 h-4" />
           <span>重置搜索</span>
@@ -311,11 +373,38 @@ const isCurrentUser = computed(() => {
   return route.name == "my-story-list";
 });
 
+const isAdminView = computed(() => {
+  return route.name === "admin-story-list";
+});
+
+const statusTabs = [
+  { label: "全部", value: "all" },
+  { label: "已发布", value: "published" },
+  { label: "待审核", value: "pending" },
+  { label: "草稿", value: "draft" },
+  { label: "已下架", value: "unpublished" },
+  { label: "已拒绝", value: "rejected" },
+];
+const statusFilter = ref<string>("all");
+
+const getStatusCount = (status: string) => {
+  if (status === "all") return stories.value.length;
+  return stories.value.filter((s) => s.status === status).length;
+};
+
+const displayedStories = computed(() => {
+  if (!isAdminView.value || statusFilter.value === "all") {
+    return stories.value;
+  }
+  return stories.value.filter((s) => s.status === statusFilter.value);
+});
+
 const query = reactive({
   search: "",
   authorId: isCurrentUser.value ? getUser?.id : "",
   createdAt: Date.now(),
   limit: 20,
+  private: isAdminView.value ? 1 : undefined,
 });
 
 const load = async (isMore = false) => {
@@ -325,7 +414,14 @@ const load = async (isMore = false) => {
     loading.value = true;
   }
   try {
-    const res = await listStories(query);
+    const params: any = {
+      search: query.search,
+      createdAt: query.createdAt,
+      limit: query.limit,
+    };
+    if (query.authorId) params.authorId = query.authorId;
+    if (isAdminView.value) params.private = 1;
+    const res = await listStories(params);
     const data = res.data ?? [];
     const total = res.total ?? 0;
     totalCount.value = total;
@@ -356,10 +452,12 @@ const editStory = (id: string) => {
   router.push({ name: "story-editor", params: { storyId: id } });
 };
 
-const previewStory = (id: string) => {
+const previewStory = (id: string, status?: string) => {
   if (!id) return;
+  const isTest =
+    isCurrentUser.value || (isAdminView.value && status !== "published");
   router.push({
-    name: isCurrentUser.value ? "test" : "play",
+    name: isTest ? "test" : "play",
     params: { storyId: id },
   });
 };
@@ -402,6 +500,16 @@ const userLink = (s: IStory) => {
 };
 
 onMounted(async () => {
+  if (isCurrentUser.value) {
+    query.authorId = getUser?.id || "";
+    query.private = undefined;
+  } else if (isAdminView.value) {
+    query.authorId = "";
+    query.private = 1;
+  } else {
+    query.authorId = "";
+    query.private = undefined;
+  }
   const q = route.query.search;
   query.search = q?.toString() || "";
   await load();
@@ -484,6 +592,7 @@ function doSearch() {
 
 function clearSearch() {
   query.search = "";
+  statusFilter.value = "all";
   doSearch();
 }
 
@@ -497,9 +606,15 @@ watch(
   (val) => {
     if (isCurrentUser.value) {
       query.authorId = getUser?.id || "";
+      query.private = undefined;
+    } else if (isAdminView.value) {
+      query.authorId = "";
+      query.private = 1;
     } else {
       query.authorId = "";
+      query.private = undefined;
     }
+    statusFilter.value = "all";
     query.createdAt = Date.now();
     load();
   },
