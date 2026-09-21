@@ -174,3 +174,54 @@ export async function sendStoryApprovedMail(
     customConfig,
   );
 }
+
+let verifyTemplate: string | null = null;
+
+function getVerifyTemplate(): string {
+  if (!verifyTemplate) {
+    verifyTemplate = fs.readFileSync(
+      path.join(__dirname, '../../assets/verify_zh.html'),
+      'utf-8',
+    );
+  }
+  return verifyTemplate;
+}
+
+export interface VerifyMailOptions {
+  to?: string;
+  nickname: string;
+  verifyUrl: string;
+  domain: string;
+}
+
+/**
+ * 发送账号/邮箱验证邮件
+ */
+export async function sendVerifyMail(
+  options: VerifyMailOptions,
+  customConfig?: MailConfig,
+) {
+  if (!options.to) {
+    throw new Error('收件人邮箱不能为空');
+  }
+  const template = getVerifyTemplate();
+  const logo = getLogoSvg();
+  const siteName = '织言·Tellory';
+
+  const html = template
+    .replaceAll('{{domain}}', options.domain)
+    .replaceAll('{{logo}}', logo)
+    .replaceAll('{{nickname}}', options.nickname)
+    .replaceAll('{{email}}', options.to)
+    .replaceAll('{{verifyUrl}}', options.verifyUrl)
+    .replaceAll('{{name}}', siteName);
+
+  return sendMail(
+    {
+      to: options.to,
+      subject: `[${siteName}] 请验证您的电子邮件地址`,
+      html,
+    },
+    customConfig,
+  );
+}

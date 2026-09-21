@@ -135,7 +135,7 @@ router.beforeEach((to) => {
     localStorage.setItem('redirect', location.href);
     return { path: "/login" };
   }
-  if (to.meta.verifiedRequired && !authStore.isVerified) {
+  if (to.meta.verifiedRequired && !authStore.isVerified && !authStore.getUser?.from) {
     return { path: "/" };
   }
   if (to.meta.adminRequired && !authStore.isAdmin) {

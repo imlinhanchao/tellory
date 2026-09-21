@@ -10,7 +10,7 @@ import { ConfigService } from 'src/config/config.service';
 import path from 'path';
 import fs from 'fs';
 import { omit } from 'src/utils';
-import { sendMail } from '../lib/mail';
+import { sendMail, sendVerifyMail, isMailConfigured } from '../lib/mail';
 
 @Injectable()
 export class AuthService {
@@ -44,18 +44,22 @@ export class AuthService {
     });
     newUser.verificationToken = token;
     newUser.isVerified = false;
+    newUser.lastVerifyMailTime = Date.now();
 
     const account = await this.usersService.save(newUser);
 
     const domain = process.env.DOMAIN || 'http://localhost:3000';
-    const mailHtml = this.makeVerifyMail({ user: account, token, domain });
 
     try {
-      await sendMail({
-        to: account.email,
-        subject: `[织言·Tellory] 请验证您的电子邮件地址`,
-        html: mailHtml,
-      });
+      if (isMailConfigured()) {
+        const verifyUrl = `${domain}/#/${account.username}/verification/?token=${token}`;
+        await sendVerifyMail({
+          to: account.email,
+          nickname: account.nickname || account.username,
+          verifyUrl,
+          domain,
+        });
+      }
     } catch (err) {
       console.error('发送验证邮件失败', err);
     }
@@ -76,6 +80,17 @@ export class AuthService {
     if (!user) throw new Error('用户不存在');
     if (user.isVerified) throw new Error('用户已激活');
 
+    const ONE_HOUR = 3600 * 1000;
+    const lastTime = Number(user.lastVerifyMailTime) || 0;
+    if (lastTime && Date.now() - lastTime < ONE_HOUR) {
+      const remainingMinutes = Math.ceil(
+        (ONE_HOUR - (Date.now() - lastTime)) / 60000,
+      );
+      throw new Error(
+        `验证邮件发送过于频繁，请在 ${remainingMinutes} 分钟后再试`,
+      );
+    }
+
     const token = crypto.randomBytes(20).toString('hex');
     const updated = await this.usersService.setVerificationTokenByEmail(
       email,
@@ -83,19 +98,19 @@ export class AuthService {
     );
     if (!updated) throw new Error('设置验证 Token 失败');
 
-    const mailHtml = this.makeVerifyMail({ user: updated, token, domain });
-
     try {
-      const res = await sendMail({
+      const verifyUrl = `${domain}/#/${updated.username}/verification/?token=${token}`;
+      const res = await sendVerifyMail({
         to: updated.email,
-        subject: `[织言·Tellory] 请验证您的电子邮件地址`,
-        html: mailHtml,
+        nickname: updated.nickname || updated.username,
+        verifyUrl,
+        domain,
       });
       console.log('发送验证邮件结果', res);
       return { success: true };
     } catch (err) {
       console.error('发送验证邮件失败', err);
-      throw new Error('发送验证邮件失败');
+      throw new Error(err?.message || '发送验证邮件失败');
     }
   }
 

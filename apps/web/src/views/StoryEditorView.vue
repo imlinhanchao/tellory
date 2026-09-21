@@ -1615,7 +1615,9 @@ const performSave = async () => {
     } catch {
       saveDraft();
     }
-    msg.error("保存到服务器失败，已保存到本地草稿");
+    const errMessage =
+      (e as any)?.response?.data?.message || (e as any)?.message;
+    msg.error(errMessage || "保存到服务器失败，已保存到本地草稿");
   } finally {
     saveInProgress.value = false;
   }

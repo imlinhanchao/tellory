@@ -1,4 +1,8 @@
-import { Injectable } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
 import { User } from './user.entity';
@@ -7,6 +11,7 @@ import * as crypto from 'crypto';
 import * as GitHub from '../lib/github';
 import * as Steam from '../lib/steam';
 import { ConfigService } from 'src/config/config.service';
+import { isMailConfigured, sendVerifyMail } from '../lib/mail';
 
 @Injectable()
 export class UsersService {
@@ -109,6 +114,7 @@ export class UsersService {
     if (!user) return null;
     user.verificationToken = token;
     user.isVerified = false;
+    user.lastVerifyMailTime = Date.now();
     await this.usersRepository.update({ id: user.id }, user);
     return user;
   }
@@ -144,5 +150,77 @@ export class UsersService {
       sourceId: userInfo.steamid,
       isVerified: true,
     });
+  }
+
+  async updateProfile(
+    userId: string,
+    data: { nickname?: string; email?: string },
+    domain?: string,
+  ): Promise<User> {
+    const user = await this.findById(userId);
+    if (!user) throw new NotFoundException('用户不存在');
+
+    if (data.nickname !== undefined) {
+      user.nickname = data.nickname.trim();
+    }
+
+    if (data.email !== undefined) {
+      const newEmail = data.email.trim();
+      const oldEmail = (user.email || '').trim();
+
+      if (newEmail !== oldEmail) {
+        if (newEmail && !newEmail.includes('@')) {
+          throw new BadRequestException('邮箱格式不正确');
+        }
+
+        if (newEmail) {
+          const existing = await this.findByEmail(newEmail);
+          if (existing && existing.id !== user.id) {
+            throw new BadRequestException('该邮箱已被其他账号使用');
+          }
+
+          // 频率限制：一小时内只能发送一次验证邮件
+          const ONE_HOUR = 3600 * 1000;
+          const lastTime = Number(user.lastVerifyMailTime) || 0;
+          if (lastTime && Date.now() - lastTime < ONE_HOUR) {
+            const remainingMinutes = Math.ceil(
+              (ONE_HOUR - (Date.now() - lastTime)) / 60000,
+            );
+            throw new BadRequestException(
+              `验证邮件发送过于频繁，请在 ${remainingMinutes} 分钟后再试`,
+            );
+          }
+
+          user.email = newEmail;
+          user.isVerified = false;
+          const token = crypto.randomBytes(20).toString('hex');
+          user.verificationToken = token;
+          user.lastVerifyMailTime = Date.now();
+
+          // 若配置了邮件服务，发送验证邮件
+          if (isMailConfigured()) {
+            const siteDomain =
+              domain || process.env.DOMAIN || 'http://localhost:3000';
+            const verifyUrl = `${siteDomain}/#/${user.username}/verification/?token=${token}`;
+            sendVerifyMail({
+              to: user.email,
+              nickname: user.nickname || user.username,
+              verifyUrl,
+              domain: siteDomain,
+            }).catch((err) => {
+              console.error('发送更新邮箱验证邮件失败:', err);
+            });
+          }
+        } else {
+          // 清空邮箱时取消已验证状态
+          user.email = '';
+          user.isVerified = false;
+          user.verificationToken = '';
+        }
+      }
+    }
+
+    await this.usersRepository.update({ id: user.id }, user);
+    return user;
   }
 }

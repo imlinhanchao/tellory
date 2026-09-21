@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, ForbiddenException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Like, LessThanOrEqual, In } from 'typeorm';
 import { UsersService } from 'src/users/users.service';
@@ -83,6 +83,14 @@ export class StoriesService {
   }
 
   async create(dto: StoryDto): Promise<Story> {
+    if (dto.authorId) {
+      const author = await this.usersService.findById(dto.authorId);
+      if (author && !author.isVerified && !author.from) {
+        throw new ForbiddenException(
+          '未验证邮箱的用户不允许创建新故事，请先前往个人中心验证邮箱',
+        );
+      }
+    }
     const story = new Story(dto);
     // 空串必须落为 NULL，否则多个空串会撞上 unique 索引
     story.shortname = this.normalizeShortname(dto.shortname);
@@ -383,8 +391,13 @@ export class StoriesService {
         });
       }
 
-      // 2. 故事审核通过且作者配置了邮箱时，发送邮件通知
-      if (status === 'approved' && author.email && isMailConfigured()) {
+      // 2. 故事审核通过且作者配置了已验证邮箱时，发送邮件通知（未验证邮箱不发送）
+      if (
+        status === 'approved' &&
+        author.email &&
+        author.isVerified &&
+        isMailConfigured()
+      ) {
         const playUrl = siteDomain
           ? `${siteDomain}/#/play/${key}`
           : `/#/play/${key}`;

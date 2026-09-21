@@ -4,12 +4,22 @@ export interface UserProfile {
   id: string;
   username: string;
   nickname?: string;
+  email?: string;
+  from?: string;
   avatar?: string;
   isAdmin: boolean;
+  isVerified: boolean;
   /** 是否已完成编辑器引导 */
   isToured?: boolean;
-  points: number;
-  createdAt: string;
+  points?: number;
+  createdAt?: string;
+}
+
+/**
+ * Update current user profile (nickname, email)
+ */
+export function updateProfile(data: { nickname?: string; email?: string }) {
+  return request.put<UserProfile>({ url: "/users/profile", data });
 }
 
 /**

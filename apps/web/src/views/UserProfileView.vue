@@ -3,7 +3,7 @@
     <div class="bg-base-100 p-8 rounded-3xl border border-base-200 shadow-sm flex flex-col md:flex-row gap-8 items-start">
       <div class="relative">
         <Avatar :user="userInfo" :size="120" class="ring-4 ring-base-200" />
-        <div v-if="isCurrentUser && userInfo?.email" class="absolute -bottom-2 -right-2">
+        <div v-if="isCurrentUser && userInfo?.email && !userInfo?.from" class="absolute -bottom-2 -right-2">
           <a :href="cravatarHome" target="_blank" class="btn btn-circle btn-sm btn-primary shadow-lg tooltip tooltip-bottom" data-tip="前往 Cravatar 更换头像">
             <Icon icon="mdi:pencil" />
           </a>
@@ -12,15 +12,41 @@
       <div class="flex-1 space-y-4">
         <div class="flex items-center gap-3">
           <h2 class="text-3xl font-black">{{ userInfo?.nickname || userInfo?.username }}</h2>
-          <span v-if="isCurrentUser && !userInfo.isVerified" class="badge badge-warning gap-1">
-            <Icon icon="mdi:alert-circle-outline" /> 未激活
+          <span v-if="userInfo?.nickname && userInfo?.username" class="text-sm text-base-content/50 font-mono">
+            @{{ userInfo.username }}
           </span>
+          <button
+            v-if="isCurrentUser"
+            class="btn btn-circle btn-ghost btn-sm tooltip tooltip-right"
+            data-tip="编辑资料"
+            @click="openEditModal"
+          >
+            <Icon icon="mdi:pencil" class="text-lg" />
+          </button>
         </div>
+
+        <template v-if="isCurrentUser">
+          <div v-if="userInfo?.email" class="text-sm text-base-content/70 flex items-center gap-2">
+            <Icon icon="mdi:email-outline" />
+            <span>{{ userInfo.email }}</span>
+            <span v-if="userInfo.isVerified" class="badge badge-xs badge-success gap-0.5">
+              <Icon icon="mdi:check" class="text-xs" /> 已验证
+            </span>
+            <span v-else class="badge badge-xs badge-warning gap-0.5">
+              <Icon icon="mdi:alert-circle-outline" class="text-xs" /> 未激活
+            </span>
+          </div>
+          <div v-else class="text-sm text-warning flex items-center gap-2">
+            <Icon icon="mdi:alert-circle-outline" />
+            <span>未设置邮箱（未验证用户无法创建新故事）</span>
+          </div>
+        </template>
+
         <div class="flex gap-6 text-base-content/70">
           <div class="flex items-center gap-2"><Icon icon="mdi:book-edit" /> {{ totalCount }} 篇创作</div>
           <div class="flex items-center gap-2"><Icon icon="mdi:book-open-page-variant" /> {{ progress.length }} 篇阅读</div>
         </div>
-        <div v-if="isCurrentUser && !userInfo.isVerified" class="flex gap-2">
+        <div v-if="isCurrentUser && !userInfo.isVerified && userInfo?.email" class="flex gap-2">
           <button class="btn btn-sm btn-outline btn-warning" :disabled="sendingVerify" @click="resendVerification">
             <Icon v-if="!sendingVerify" icon="mdi:email-send" />
             {{ sendingVerify ? '发送中...' : '重新发送激活邮件' }}
@@ -244,14 +270,80 @@
       <button type="submit">close</button>
     </form>
   </dialog>
+
+  <!-- 编辑资料弹窗 -->
+  <dialog ref="editProfileModalRef" class="modal">
+    <div class="modal-box max-w-120 w-full">
+      <h3 class="text-lg font-bold mb-4">编辑个人资料</h3>
+
+      <form @submit.prevent="handleSaveProfile" class="space-y-4">
+        <div class="form-control">
+          <label class="label">
+            <span class="label-text font-medium">用户名</span>
+          </label>
+          <input
+            :value="userInfo?.username"
+            type="text"
+            class="input input-bordered w-full bg-base-200 cursor-not-allowed opacity-75"
+            disabled
+          />
+          <label class="label">
+            <span class="px-1 label-text-alt text-xs text-base-content/50">* 用户名不可更改</span>
+          </label>
+        </div>
+
+        <div class="form-control">
+          <label class="label">
+            <span class="label-text font-medium">昵称</span>
+          </label>
+          <input
+            v-model="editForm.nickname"
+            type="text"
+            placeholder="请输入昵称"
+            class="input input-bordered w-full"
+            maxlength="30"
+          />
+        </div>
+
+        <div class="form-control">
+          <label class="label">
+            <span class="label-text font-medium">邮箱地址</span>
+          </label>
+          <input
+            v-model="editForm.email"
+            type="email"
+            placeholder="请输入邮箱地址"
+            class="input input-bordered w-full"
+          />
+          <label class="label">
+            <span class="label-text-alt text-warning">
+              若修改邮箱，需重新验证；一小时内仅能发送一次验证邮件。
+            </span>
+          </label>
+        </div>
+
+        <div class="modal-action">
+          <button class="btn btn-ghost" type="button" @click="closeEditModal">取消</button>
+          <button class="btn btn-primary" type="submit" :disabled="savingProfile">
+            <span v-if="savingProfile" class="loading loading-spinner loading-xs"></span>
+            {{ savingProfile ? '保存中...' : '保存' }}
+          </button>
+        </div>
+      </form>
+    </div>
+    <form method="dialog" class="modal-backdrop">
+      <button type="button" @click="closeEditModal">close</button>
+    </form>
+  </dialog>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from "vue";
+import { ref, computed, watch } from "vue";
 import md5 from "crypto-js/md5";
 import { useRoute, useRouter } from "vue-router";
 import { listStories, type IStory } from "@/api/stories";
 import { getUserUnlocks, type IUserStoryProgress } from "@/api/play";
+import { updateProfile } from "@/api/user";
 import { storyRouteKey } from "@/lib/storyRoute";
 import { useAuthStore } from "@/stores/modules/auth";
 import { Icon } from "@iconify/vue";
@@ -263,8 +355,8 @@ const route = useRoute();
 const router = useRouter();
 const auth = useAuthStore();
 
-const paramFrom = route.params.from as string | undefined;
-const paramUsername = route.params.username as string | undefined;
+const paramFrom = computed(() => route.params.from as string | undefined);
+const paramUsername = computed(() => route.params.username as string | undefined);
 const stories = ref<IStory[]>([]);
 const progress = ref<IUserStoryProgress[]>([]);
 const activeTab = ref<"stories" | "progress">(
@@ -321,26 +413,27 @@ function getCombinedProgress(p: any) {
 }
 
 const load = async () => {
+  const currentUsername = paramUsername.value;
+  const currentFrom = paramFrom.value;
+  if (!currentUsername) return;
+
   loading.value = true;
   try {
-    // If username (with optional from) provided, fetch user record first to get id
-    if (paramUsername) {
-      const userPath = paramFrom
-        ? `/users/${paramFrom}/${paramUsername}`
-        : `/users/${paramUsername}`;
-      const user = await request.get<any>({ url: userPath });
-      if (user) {
-        userInfo.value = user;
-        const [res, prog] = await Promise.all([
-          listStories({ authorId: userInfo.value!.id }),
-          getUserUnlocks(userInfo.value!.id),
-        ]);
-        const storiesRes = res.data || [];
-        stories.value = storiesRes;
-        progress.value = prog || [];
-        totalCount.value = res.total || storiesRes.length;
-        activeTab.value = storiesRes.length > 0 ? "stories" : "progress";
-      }
+    const userPath = currentFrom
+      ? `/users/${currentFrom}/${currentUsername}`
+      : `/users/${currentUsername}`;
+    const user = await request.get<any>({ url: userPath });
+    if (user) {
+      userInfo.value = user;
+      const [res, prog] = await Promise.all([
+        listStories({ authorId: userInfo.value!.id }),
+        getUserUnlocks(userInfo.value!.id),
+      ]);
+      const storiesRes = res.data || [];
+      stories.value = storiesRes;
+      progress.value = prog || [];
+      totalCount.value = res.total || storiesRes.length;
+      activeTab.value = storiesRes.length > 0 ? "stories" : "progress";
     }
   } finally {
     loading.value = false;
@@ -358,6 +451,65 @@ async function resendVerification() {
     msg.error(e?.response?.data?.message || e?.message || '发送失败');
   } finally {
     sendingVerify.value = false;
+  }
+}
+
+// Edit Profile Modal
+const editProfileModalRef = ref<HTMLDialogElement | null>(null);
+const editForm = ref({
+  nickname: "",
+  email: "",
+});
+const savingProfile = ref(false);
+
+function openEditModal() {
+  editForm.value = {
+    nickname: userInfo.value?.nickname || "",
+    email: userInfo.value?.email || "",
+  };
+  editProfileModalRef.value?.showModal();
+}
+
+function closeEditModal() {
+  editProfileModalRef.value?.close();
+}
+
+async function handleSaveProfile() {
+  if (savingProfile.value) return;
+  savingProfile.value = true;
+  try {
+    const originalEmail = (userInfo.value?.email || "").trim();
+    const newEmail = (editForm.value.email || "").trim();
+    const emailChanged = newEmail !== originalEmail;
+
+    const res = await updateProfile({
+      nickname: editForm.value.nickname,
+      email: editForm.value.email,
+    });
+
+    if (res) {
+      userInfo.value = {
+        ...userInfo.value,
+        ...res,
+        isVerified: !!res.isVerified,
+      } as User;
+      auth.patchUser({
+        nickname: res.nickname,
+        email: res.email,
+        isVerified: res.isVerified,
+      });
+
+      if (emailChanged && newEmail) {
+        msg.success("资料更新成功！已向新邮箱发送验证邮件，请前往邮箱查收并激活。");
+      } else {
+        msg.success("资料更新成功");
+      }
+      closeEditModal();
+    }
+  } catch (e: any) {
+    msg.error(e?.response?.data?.message || e?.message || "更新资料失败");
+  } finally {
+    savingProfile.value = false;
   }
 }
 
@@ -380,9 +532,20 @@ const editStory = (id: string) => {
   router.push({ name: "story-editor", params: { storyId: id } });
 };
 
-onMounted(() => {
-  load();
-});
+watch(
+  () => [route.params.from, route.params.username],
+  ([newFrom, newUsername]) => {
+    if (!newUsername) return;
+    closeEditModal();
+    closeUnlockModal();
+    userInfo.value = undefined;
+    stories.value = [];
+    progress.value = [];
+    totalCount.value = 0;
+    load();
+  },
+  { immediate: true }
+);
 
 function statusLabel(status?: string) {
   switch (status) {

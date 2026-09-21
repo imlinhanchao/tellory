@@ -41,6 +41,9 @@ export class User {
   @Column({ comment: '验证 Token', nullable: true })
   verificationToken?: string;
 
+  @Column('bigint', { default: 0, comment: '上次发送验证邮件的时间' })
+  lastVerifyMailTime: number = 0;
+
   static get unsafeKey() {
     return ['password', 'verificationToken'];
   }
@@ -59,5 +62,6 @@ export class User {
     this.isVerified = user.isVerified || false;
     this.isToured = user.isToured || false;
     this.verificationToken = user.verificationToken || '';
+    this.lastVerifyMailTime = Number(user.lastVerifyMailTime) || 0;
   }
 }

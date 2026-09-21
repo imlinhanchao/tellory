@@ -11,7 +11,7 @@
     >
       <template v-if="isAuthenticated">
         <router-link
-          v-if="userInfo && userInfo.isVerified"
+          v-if="userInfo && (userInfo.isVerified || !userInfo.from)"
           to="/story-editor"
           class="btn btn-primary btn-xs sm:btn-sm gap-1 font-medium shadow-xs"
           title="创建故事"

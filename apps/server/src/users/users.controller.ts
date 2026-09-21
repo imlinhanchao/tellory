@@ -4,6 +4,7 @@ import {
   Get,
   NotFoundException,
   Post,
+  Put,
   UseGuards,
   Request,
   Param,
@@ -11,7 +12,7 @@ import {
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { UsersService } from './users.service';
 import { User } from './user.entity';
-import { omit } from 'src/utils';
+import { omit, getDomain } from 'src/utils';
 
 @Controller('users')
 export class UsersController {
@@ -22,6 +23,22 @@ export class UsersController {
   async getProfile(@Request() req) {
     const user = await this.usersService.findById(req.user.userId);
     if (!user) throw new Error('用户不存在');
+    return omit(user, User.unsafeKey);
+  }
+
+  /** 更新当前用户资料（昵称、邮箱） */
+  @UseGuards(JwtAuthGuard)
+  @Put('profile')
+  async updateProfile(
+    @Request() req,
+    @Body() body: { nickname?: string; email?: string },
+  ) {
+    const domain = getDomain(req);
+    const user = await this.usersService.updateProfile(
+      req.user.userId,
+      body,
+      domain,
+    );
     return omit(user, User.unsafeKey);
   }
 
@@ -42,11 +59,15 @@ export class UsersController {
     @Param('from') from: string,
     @Param('username') username: string,
   ) {
-    return this.usersService.findOne(username, from);
+    const user = await this.usersService.findOne(username, from);
+    if (!user) return null;
+    return omit(user, User.unsafeKey);
   }
 
   @Get(':username')
   async getUserInfo(@Param('username') username: string) {
-    return this.usersService.findOne(username, '');
+    const user = await this.usersService.findOne(username, '');
+    if (!user) return null;
+    return omit(user, User.unsafeKey);
   }
 }
