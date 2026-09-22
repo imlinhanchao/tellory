@@ -63,6 +63,9 @@ export class Comment {
   @Column({ default: false, comment: '是否剧透' })
   isSpoiler: boolean = false;
 
+  @Column({ default: false, comment: '是否仅作者可见' })
+  isAuthorOnly: boolean = false;
+
   @Column('json', {
     nullable: true,
     comment: '划词评论位置信息(包含起始/终止位置、场景名称、变量快照等)',

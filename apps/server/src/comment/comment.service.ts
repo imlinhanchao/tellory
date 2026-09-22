@@ -39,6 +39,7 @@ export interface CommentWithDetails {
   replyToId?: string;
   replyToUserId?: string;
   isSpoiler: boolean;
+  isAuthorOnly: boolean;
   position?: CommentPosition | null;
   isDeleted: boolean;
   isBlocked: boolean;
@@ -77,6 +78,29 @@ export class CommentService {
         throw new NotFoundException('故事不存在');
       }
     }
+  }
+
+  /**
+   * 获取故事作者ID
+   */
+  async getStoryAuthorId(storyId: string): Promise<string | null> {
+    try {
+      const approved = await this.storiesService.getApprovedByIds([storyId]);
+      if (approved && approved.length > 0 && approved[0].authorId) {
+        return approved[0].authorId;
+      }
+      const stories = await this.storiesService.getStorysByIds([storyId]);
+      if (stories && stories.length > 0 && stories[0].authorId) {
+        return stories[0].authorId;
+      }
+      const s =
+        (await this.storiesService.findById(storyId, true)) ||
+        (await this.storiesService.findById(storyId, false));
+      if (s?.authorId) return s.authorId;
+    } catch (err) {
+      console.warn('[CommentService] getStoryAuthorId failed:', err);
+    }
+    return null;
   }
 
   /**
@@ -285,6 +309,8 @@ export class CommentService {
     let replyToId: string | null = null;
     let replyToUserId: string | null = null;
 
+    let isAuthorOnly = Boolean(dto.isAuthorOnly);
+
     if (dto.parentId) {
       const parent = await this.commentRepo.findOne({
         where: { id: dto.parentId },
@@ -297,6 +323,9 @@ export class CommentService {
       }
       if (parent.isBlocked) {
         throw new BadRequestException('该评论已被屏蔽，无法回复');
+      }
+      if (parent.isAuthorOnly) {
+        isAuthorOnly = true;
       }
 
       // 二级扁平化：如果被回复的是子评论，根 parentId 指向原根评论，replyToId 指向当前被回复的评论
@@ -325,6 +354,7 @@ export class CommentService {
       replyToId: replyToId || undefined,
       replyToUserId: replyToUserId || undefined,
       isSpoiler: Boolean(dto.isSpoiler),
+      isAuthorOnly,
       position: normalizedPosition,
       isDeleted: false,
       isBlocked: false,
@@ -338,7 +368,11 @@ export class CommentService {
   /**
    * 查询评论列表
    */
-  async findAll(query: QueryCommentsDto, isAdmin = false) {
+  async findAll(
+    query: QueryCommentsDto,
+    isAdmin = false,
+    currentUserId?: string,
+  ) {
     const {
       storyId,
       sceneName,
@@ -347,11 +381,18 @@ export class CommentService {
       hasPosition,
       tree,
       includeSpoilers = true,
+      isAuthorOnly,
       includeBlocked,
       limit = 20,
       page = 1,
       createdAt,
     } = query;
+
+    const storyAuthorId = await this.getStoryAuthorId(storyId);
+    const isStoryAuthor = Boolean(
+      storyAuthorId && currentUserId && currentUserId === storyAuthorId,
+    );
+    const canViewAllAuthorOnly = isAdmin || isStoryAuthor;
 
     const qb = this.commentRepo.createQueryBuilder('comment');
     qb.where('comment.storyId = :storyId', { storyId });
@@ -366,6 +407,33 @@ export class CommentService {
 
     if (includeBlocked === false) {
       qb.andWhere('comment.isBlocked = :isBlocked', { isBlocked: false });
+    }
+
+    // 作者可见过滤
+    if (isAuthorOnly !== undefined) {
+      if (isAuthorOnly === true) {
+        if (canViewAllAuthorOnly) {
+          qb.andWhere('comment.isAuthorOnly = :authOnly', { authOnly: true });
+        } else if (currentUserId) {
+          qb.andWhere(
+            'comment.isAuthorOnly = :authOnly AND comment.userId = :currentUserId',
+            { authOnly: true, currentUserId },
+          );
+        } else {
+          qb.andWhere('1 = 0');
+        }
+      } else {
+        qb.andWhere('comment.isAuthorOnly = :authOnly', { authOnly: false });
+      }
+    } else if (!canViewAllAuthorOnly) {
+      if (currentUserId) {
+        qb.andWhere(
+          '(comment.isAuthorOnly = :authFalse OR comment.userId = :currentUserId)',
+          { authFalse: false, currentUserId },
+        );
+      } else {
+        qb.andWhere('comment.isAuthorOnly = :authFalse', { authFalse: false });
+      }
     }
 
     if (hasPosition === true) {
@@ -468,10 +536,33 @@ export class CommentService {
       let repliesByParent: Record<string, CommentWithDetails[]> = {};
 
       if (rootIds.length > 0) {
-        const replies = await this.commentRepo.find({
-          where: { parentId: In(rootIds) },
-          order: { createdAt: 'ASC' },
-        });
+        const replyQb = this.commentRepo.createQueryBuilder('comment');
+        replyQb.where('comment.parentId IN (:...rootIds)', { rootIds });
+        replyQb.orderBy('comment.createdAt', 'ASC');
+
+        if (!canViewAllAuthorOnly) {
+          const myRootIds = filteredRoots
+            .filter((r) => r.userId === currentUserId)
+            .map((r) => r.id);
+
+          if (currentUserId && myRootIds.length > 0) {
+            replyQb.andWhere(
+              '(comment.isAuthorOnly = :authFalse OR comment.userId = :currentUserId OR comment.parentId IN (:...myRootIds))',
+              { authFalse: false, currentUserId, myRootIds },
+            );
+          } else if (currentUserId) {
+            replyQb.andWhere(
+              '(comment.isAuthorOnly = :authFalse OR comment.userId = :currentUserId)',
+              { authFalse: false, currentUserId },
+            );
+          } else {
+            replyQb.andWhere('comment.isAuthorOnly = :authFalse', {
+              authFalse: false,
+            });
+          }
+        }
+
+        const replies = await replyQb.getMany();
         const detailedReplies = await this.attachUserDetails(replies, isAdmin);
 
         repliesByParent = detailedReplies.reduce(
@@ -529,10 +620,24 @@ export class CommentService {
   /**
    * 查询单条评论及其所有回复
    */
-  async findOne(id: string, isAdmin = false): Promise<CommentWithDetails> {
+  async findOne(
+    id: string,
+    isAdmin = false,
+    currentUserId?: string,
+  ): Promise<CommentWithDetails> {
     const comment = await this.commentRepo.findOne({ where: { id } });
     if (!comment) {
       throw new NotFoundException('评论不存在');
+    }
+
+    if (comment.isAuthorOnly) {
+      const storyAuthorId = await this.getStoryAuthorId(comment.storyId);
+      const isStoryAuthor = Boolean(
+        storyAuthorId && currentUserId && currentUserId === storyAuthorId,
+      );
+      if (!isAdmin && !isStoryAuthor && currentUserId !== comment.userId) {
+        throw new NotFoundException('评论不存在');
+      }
     }
 
     const [detailed] = await this.attachUserDetails([comment], isAdmin);
@@ -594,6 +699,9 @@ export class CommentService {
     if (dto.isSpoiler !== undefined) {
       comment.isSpoiler = dto.isSpoiler;
     }
+    if (dto.isAuthorOnly !== undefined) {
+      comment.isAuthorOnly = dto.isAuthorOnly;
+    }
 
     const saved = await this.commentRepo.save(comment);
     const [detailed] = await this.attachUserDetails([saved]);
@@ -631,11 +739,35 @@ export class CommentService {
    */
   async getSceneCommentCounts(
     storyId: string,
+    currentUserId?: string,
+    isAdmin = false,
   ): Promise<Record<string, { total: number; spoilers: number }>> {
-    const comments = await this.commentRepo.find({
-      where: { storyId, isDeleted: false, isBlocked: false },
-      select: { id: true, position: true, isSpoiler: true },
-    });
+    const storyAuthorId = await this.getStoryAuthorId(storyId);
+    const isStoryAuthor = Boolean(
+      storyAuthorId && currentUserId && currentUserId === storyAuthorId,
+    );
+    const canViewAll = isAdmin || isStoryAuthor;
+
+    const qb = this.commentRepo.createQueryBuilder('comment');
+    qb.where('comment.storyId = :storyId', { storyId });
+    qb.andWhere('comment.isDeleted = :isDeleted', { isDeleted: false });
+    qb.andWhere('comment.isBlocked = :isBlocked', { isBlocked: false });
+    qb.andWhere('comment.position IS NOT NULL');
+
+    if (!canViewAll) {
+      if (currentUserId) {
+        qb.andWhere(
+          '(comment.isAuthorOnly = :authFalse OR comment.userId = :currentUserId)',
+          { authFalse: false, currentUserId },
+        );
+      } else {
+        qb.andWhere('comment.isAuthorOnly = :authFalse', { authFalse: false });
+      }
+    }
+
+    const comments = await qb
+      .select(['comment.id', 'comment.position', 'comment.isSpoiler'])
+      .getMany();
 
     const result: Record<string, { total: number; spoilers: number }> = {};
     for (const c of comments) {

@@ -38,13 +38,20 @@ export class CommentController {
   @Get()
   async list(@Query() query: QueryCommentsDto, @Request() req) {
     const isAdmin = Boolean(req?.user?.isAdmin);
-    return this.commentService.findAll(query, isAdmin);
+    const currentUserId = req?.user?.userId;
+    return this.commentService.findAll(query, isAdmin, currentUserId);
   }
 
   @UseGuards(OptionalAuthGuard)
   @Get('counts')
-  async getCounts(@Query('storyId') storyId: string) {
-    return this.commentService.getSceneCommentCounts(storyId);
+  async getCounts(@Query('storyId') storyId: string, @Request() req) {
+    const isAdmin = Boolean(req?.user?.isAdmin);
+    const currentUserId = req?.user?.userId;
+    return this.commentService.getSceneCommentCounts(
+      storyId,
+      currentUserId,
+      isAdmin,
+    );
   }
 
   // 管理员获取举报列表（须在 :id 之前声明以避免路由被拦截）
@@ -69,7 +76,8 @@ export class CommentController {
   @Get(':id')
   async getOne(@Param('id') id: string, @Request() req) {
     const isAdmin = Boolean(req?.user?.isAdmin);
-    return this.commentService.findOne(id, isAdmin);
+    const currentUserId = req?.user?.userId;
+    return this.commentService.findOne(id, isAdmin, currentUserId);
   }
 
   @UseGuards(JwtAuthGuard)

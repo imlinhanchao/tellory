@@ -60,6 +60,10 @@ export class CreateCommentDto {
   isSpoiler?: boolean;
 
   @IsOptional()
+  @IsBoolean()
+  isAuthorOnly?: boolean;
+
+  @IsOptional()
   @IsString()
   parentId?: string;
 
@@ -86,6 +90,10 @@ export class UpdateCommentDto {
   @IsOptional()
   @IsBoolean()
   isSpoiler?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  isAuthorOnly?: boolean;
 }
 
 export class QueryCommentsDto {
@@ -130,6 +138,15 @@ export class QueryCommentsDto {
       : value === 'true' || value === true || value === '1',
   )
   includeSpoilers?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  @Transform(({ value }) =>
+    value === undefined || value === null || value === ''
+      ? undefined
+      : value === 'true' || value === true || value === '1',
+  )
+  isAuthorOnly?: boolean;
 
   @IsOptional()
   @IsNumber()

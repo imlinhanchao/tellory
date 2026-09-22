@@ -176,15 +176,30 @@
             :disabled="inlineSubmitting"
           ></textarea>
 
-          <label class="label cursor-pointer justify-start gap-2 py-0">
-            <input
-              v-model="inlineIsSpoiler"
-              type="checkbox"
-              class="checkbox checkbox-sm checkbox-warning"
-              :disabled="inlineSubmitting"
-            />
-            <span class="label-text text-xs text-base-content/70">标记为剧透评论（折叠展示）</span>
-          </label>
+          <div class="flex items-center gap-4 flex-wrap">
+            <label class="label cursor-pointer justify-start gap-2 py-0">
+              <input
+                v-model="inlineIsSpoiler"
+                type="checkbox"
+                class="checkbox checkbox-sm checkbox-warning rounded"
+                :disabled="inlineSubmitting"
+              />
+              <span class="label-text text-xs text-base-content/70">标记剧透</span>
+            </label>
+
+            <label class="label cursor-pointer justify-start gap-2 py-0">
+              <input
+                v-model="inlineIsAuthorOnly"
+                type="checkbox"
+                class="checkbox checkbox-sm checkbox-primary rounded"
+                :disabled="inlineSubmitting"
+              />
+              <span class="label-text text-xs text-base-content/70 flex items-center gap-1">
+                <Icon icon="mdi:lock-outline" class="size-3.5 text-primary" />
+                仅作者可见
+              </span>
+            </label>
+          </div>
         </div>
 
         <!-- 弹窗底部操作按钮 -->
@@ -260,6 +275,13 @@
                   {{ c.author?.nickname || c.author?.username || "读者" }}
                 </span>
                 <span v-if="c.isSpoiler" class="badge badge-warning badge-xs">剧透</span>
+                <span
+                  v-if="c.isAuthorOnly"
+                  class="badge badge-primary badge-soft badge-xs gap-1 font-sans"
+                >
+                  <Icon icon="mdi:lock-outline" class="size-2.5" />
+                  仅作者可见
+                </span>
               </div>
               <div class="flex items-center gap-1.5">
                 <span class="text-base-content/40 font-mono text-[10px]">
@@ -318,15 +340,28 @@
                 :placeholder="`回复 @${c.author?.nickname || c.author?.username || '读者'}...`"
                 :disabled="quoteReplySubmitting"
               ></textarea>
-              <div class="flex items-center justify-between">
-                <label class="label cursor-pointer gap-1 py-0">
-                  <input
-                    v-model="quoteReplyIsSpoiler"
-                    type="checkbox"
-                    class="checkbox checkbox-warning checkbox-xs rounded"
-                  />
-                  <span class="label-text text-[11px] text-base-content/70">包含剧透</span>
-                </label>
+              <div class="flex items-center justify-between flex-wrap gap-2">
+                <div class="flex items-center gap-2">
+                  <label class="label cursor-pointer gap-1 py-0">
+                    <input
+                      v-model="quoteReplyIsSpoiler"
+                      type="checkbox"
+                      class="checkbox checkbox-warning checkbox-xs rounded"
+                    />
+                    <span class="label-text text-[11px] text-base-content/70">包含剧透</span>
+                  </label>
+                  <label class="label cursor-pointer gap-1 py-0">
+                    <input
+                      v-model="quoteReplyIsAuthorOnly"
+                      type="checkbox"
+                      class="checkbox checkbox-primary checkbox-xs rounded"
+                    />
+                    <span class="label-text text-[11px] text-base-content/70 flex items-center gap-0.5">
+                      <Icon icon="mdi:lock-outline" class="size-2.5 text-primary" />
+                      仅作者可见
+                    </span>
+                  </label>
+                </div>
                 <div class="flex items-center gap-1.5">
                   <button
                     type="button"
@@ -377,6 +412,13 @@
                       </span>
                     </template>
                     <span v-if="reply.isSpoiler" class="badge badge-warning badge-xs">剧透</span>
+                    <span
+                      v-if="reply.isAuthorOnly"
+                      class="badge badge-primary badge-soft badge-xs gap-1 font-sans"
+                    >
+                      <Icon icon="mdi:lock-outline" class="size-2.5" />
+                      仅作者可见
+                    </span>
                   </div>
                   <div class="flex items-center gap-1">
                     <span class="text-base-content/40 font-mono text-[10px]">
@@ -435,15 +477,28 @@
                     :placeholder="`回复 @${reply.author?.nickname || reply.author?.username || '读者'}...`"
                     :disabled="quoteReplySubmitting"
                   ></textarea>
-                  <div class="flex items-center justify-between">
-                    <label class="label cursor-pointer gap-1 py-0">
-                      <input
-                        v-model="quoteReplyIsSpoiler"
-                        type="checkbox"
-                        class="checkbox checkbox-warning checkbox-xs rounded"
-                      />
-                      <span class="label-text text-[11px] text-base-content/70">包含剧透</span>
-                    </label>
+                  <div class="flex items-center justify-between flex-wrap gap-2">
+                    <div class="flex items-center gap-2">
+                      <label class="label cursor-pointer gap-1 py-0">
+                        <input
+                          v-model="quoteReplyIsSpoiler"
+                          type="checkbox"
+                          class="checkbox checkbox-warning checkbox-xs rounded"
+                        />
+                        <span class="label-text text-[11px] text-base-content/70">包含剧透</span>
+                      </label>
+                      <label class="label cursor-pointer gap-1 py-0">
+                        <input
+                          v-model="quoteReplyIsAuthorOnly"
+                          type="checkbox"
+                          class="checkbox checkbox-primary checkbox-xs rounded"
+                        />
+                        <span class="label-text text-[11px] text-base-content/70 flex items-center gap-0.5">
+                          <Icon icon="mdi:lock-outline" class="size-2.5 text-primary" />
+                          仅作者可见
+                        </span>
+                      </label>
+                    </div>
                     <div class="flex items-center gap-1.5">
                       <button
                         type="button"
@@ -780,6 +835,7 @@ const currentSelection = ref<{
 const showInlineModal = ref(false);
 const inlineCommentContent = ref("");
 const inlineIsSpoiler = ref(false);
+const inlineIsAuthorOnly = ref(false);
 const inlineSubmitting = ref(false);
 
 // 点击高亮引文查看评论弹窗
@@ -795,6 +851,7 @@ const activeQuoteReply = ref<{
 } | null>(null);
 const quoteReplyContent = ref("");
 const quoteReplyIsSpoiler = ref(false);
+const quoteReplyIsAuthorOnly = ref(false);
 const quoteReplySubmitting = ref(false);
 
 const activeQuoteTotalCount = computed(() => {
@@ -1107,6 +1164,7 @@ function openSelectionCommentModal() {
   floatingBtnVisible.value = false;
   inlineCommentContent.value = "";
   inlineIsSpoiler.value = false;
+  inlineIsAuthorOnly.value = false;
   showInlineModal.value = true;
   // 清除浏览器选区，避免后续 selectionchange / mouseup 循环触发
   window.getSelection()?.removeAllRanges();
@@ -1116,6 +1174,7 @@ function closeSelectionCommentModal() {
   showInlineModal.value = false;
   inlineCommentContent.value = "";
   inlineIsSpoiler.value = false;
+  inlineIsAuthorOnly.value = false;
 }
 
 async function submitSelectionComment() {
@@ -1131,6 +1190,7 @@ async function submitSelectionComment() {
       storyId: storyId.value,
       content: inlineCommentContent.value.trim(),
       isSpoiler: inlineIsSpoiler.value,
+      isAuthorOnly: inlineIsAuthorOnly.value,
       position: {
         sceneName: currentPassageName.value,
         start: currentSelection.value.start,
@@ -1217,12 +1277,16 @@ function startQuoteReply(root: CommentItem, target: CommentItem) {
   activeQuoteReply.value = { rootId: root.id, targetComment: target };
   quoteReplyContent.value = "";
   quoteReplyIsSpoiler.value = false;
+  quoteReplyIsAuthorOnly.value = Boolean(
+    root.isAuthorOnly || target.isAuthorOnly,
+  );
 }
 
 function cancelQuoteReply() {
   activeQuoteReply.value = null;
   quoteReplyContent.value = "";
   quoteReplyIsSpoiler.value = false;
+  quoteReplyIsAuthorOnly.value = false;
 }
 
 async function submitQuoteReply() {
@@ -1242,6 +1306,7 @@ async function submitQuoteReply() {
       replyToId: activeQuoteReply.value.targetComment.id,
       replyToUserId: activeQuoteReply.value.targetComment.userId,
       isSpoiler: quoteReplyIsSpoiler.value,
+      isAuthorOnly: quoteReplyIsAuthorOnly.value,
     });
     Message.success("回复发送成功");
     cancelQuoteReply();

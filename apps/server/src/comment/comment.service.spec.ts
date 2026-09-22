@@ -78,6 +78,7 @@ describe('CommentService', () => {
             {
               id: 'approved-1',
               sourceStoryId: 'valid-story-id',
+              authorId: 'story-author-user',
               content:
                 ':: scene_cabin\nHere is a chest.\n\n:: scene_auto\n你身上有 $gold 金币和 $hp 点生命值。\n[[继续|Next]]',
             },
@@ -87,7 +88,13 @@ describe('CommentService', () => {
       }),
       getStorysByIds: jest.fn((ids: string[]) => {
         if (ids.includes('valid-story-id') || ids.includes('draft-story-id')) {
-          return Promise.resolve([{ id: ids[0], title: 'Test Story' }]);
+          return Promise.resolve([
+            {
+              id: ids[0],
+              title: 'Test Story',
+              authorId: 'story-author-user',
+            },
+          ]);
         }
         return Promise.resolve([]);
       }),
@@ -220,7 +227,7 @@ describe('CommentService', () => {
           startOffset: 150,
           endOffset: 50,
           variables: { score: 10 },
-        } as any,
+        },
       });
 
       expect(mockCommentRepo.create).toHaveBeenCalledWith(
@@ -349,6 +356,49 @@ describe('CommentService', () => {
         }),
       ).rejects.toThrow(BadRequestException);
     });
+
+    it('should create comment with isAuthorOnly true', async () => {
+      await service.create('user-1', {
+        storyId: 'valid-story-id',
+        content: 'Secret comment for author',
+        isAuthorOnly: true,
+      });
+
+      expect(mockCommentRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          storyId: 'valid-story-id',
+          userId: 'user-1',
+          content: 'Secret comment for author',
+          isAuthorOnly: true,
+        }),
+      );
+    });
+
+    it('should inherit isAuthorOnly from parent comment when replying', async () => {
+      mockCommentRepo.findOne.mockResolvedValueOnce({
+        id: 'author-only-root',
+        storyId: 'valid-story-id',
+        userId: 'user-1',
+        content: 'Author only root comment',
+        parentId: null,
+        isDeleted: false,
+        isAuthorOnly: true,
+      });
+
+      await service.create('user-author', {
+        storyId: 'valid-story-id',
+        content: 'Author response to secret comment',
+        parentId: 'author-only-root',
+        isAuthorOnly: false,
+      });
+
+      expect(mockCommentRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          parentId: 'author-only-root',
+          isAuthorOnly: true,
+        }),
+      );
+    });
   });
 
   describe('update comment', () => {
@@ -405,6 +455,30 @@ describe('CommentService', () => {
       );
       expect(result.content).toBe('Updated content');
       expect(result.isSpoiler).toBe(true);
+    });
+
+    it('should allow author or admin to update isAuthorOnly if no replies', async () => {
+      const existing = {
+        id: 'c1',
+        userId: 'author-user',
+        content: 'Original',
+        isSpoiler: false,
+        isAuthorOnly: false,
+        isDeleted: false,
+      };
+      mockCommentRepo.findOne.mockResolvedValueOnce(existing);
+      mockCommentRepo.count.mockResolvedValueOnce(0);
+
+      const result = await service.update('c1', 'author-user', false, {
+        isAuthorOnly: true,
+      });
+
+      expect(mockCommentRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          isAuthorOnly: true,
+        }),
+      );
+      expect(result.isAuthorOnly).toBe(true);
     });
   });
 
@@ -494,19 +568,19 @@ describe('CommentService', () => {
           ],
           1,
         ]),
+        getMany: jest.fn().mockResolvedValueOnce([
+          {
+            id: 'reply-1',
+            storyId: 'valid-story-id',
+            userId: 'user-2',
+            content: 'Reply to Root 1',
+            parentId: 'root-1',
+            replyToUserId: 'user-1',
+            isDeleted: false,
+          },
+        ]),
       };
       mockCommentRepo.createQueryBuilder.mockReturnValue(mockQb);
-      mockCommentRepo.find.mockResolvedValueOnce([
-        {
-          id: 'reply-1',
-          storyId: 'valid-story-id',
-          userId: 'user-2',
-          content: 'Reply to Root 1',
-          parentId: 'root-1',
-          replyToUserId: 'user-1',
-          isDeleted: false,
-        },
-      ]);
 
       const res = await service.findAll({
         storyId: 'valid-story-id',
@@ -731,16 +805,151 @@ describe('CommentService', () => {
       expect(res.data.length).toBe(2);
       expect(res.data.map((c) => c.id)).toEqual(['c-story', 'c-cave']);
     });
+
+    it('should filter out isAuthorOnly comments for ordinary unauthorized reader in findAll', async () => {
+      const mockQb: any = {
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        skip: jest.fn().mockReturnThis(),
+        take: jest.fn().mockReturnThis(),
+        getManyAndCount: jest.fn().mockResolvedValueOnce([[], 0]),
+      };
+      mockCommentRepo.createQueryBuilder.mockReturnValue(mockQb);
+
+      await service.findAll(
+        { storyId: 'valid-story-id' },
+        false,
+        'user-reader',
+      );
+
+      expect(mockQb.andWhere).toHaveBeenCalledWith(
+        '(comment.isAuthorOnly = :authFalse OR comment.userId = :currentUserId)',
+        { authFalse: false, currentUserId: 'user-reader' },
+      );
+    });
+
+    it('should allow story author to see isAuthorOnly comments in findAll without restriction', async () => {
+      const mockQb: any = {
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        skip: jest.fn().mockReturnThis(),
+        take: jest.fn().mockReturnThis(),
+        getManyAndCount: jest.fn().mockResolvedValueOnce([[], 0]),
+      };
+      mockCommentRepo.createQueryBuilder.mockReturnValue(mockQb);
+
+      await service.findAll(
+        { storyId: 'valid-story-id' },
+        false,
+        'story-author-user',
+      );
+
+      expect(mockQb.andWhere).not.toHaveBeenCalledWith(
+        expect.stringContaining('comment.isAuthorOnly = :authFalse'),
+        expect.anything(),
+      );
+    });
+
+    it('should allow admin to see isAuthorOnly comments in findAll without restriction', async () => {
+      const mockQb: any = {
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        skip: jest.fn().mockReturnThis(),
+        take: jest.fn().mockReturnThis(),
+        getManyAndCount: jest.fn().mockResolvedValueOnce([[], 0]),
+      };
+      mockCommentRepo.createQueryBuilder.mockReturnValue(mockQb);
+
+      await service.findAll({ storyId: 'valid-story-id' }, true, 'admin-user');
+
+      expect(mockQb.andWhere).not.toHaveBeenCalledWith(
+        expect.stringContaining('comment.isAuthorOnly = :authFalse'),
+        expect.anything(),
+      );
+    });
+
+    it('should throw NotFoundException when unauthorized reader accesses author-only comment in findOne', async () => {
+      mockCommentRepo.findOne.mockResolvedValueOnce({
+        id: 'secret-c1',
+        storyId: 'valid-story-id',
+        userId: 'creator-user',
+        content: 'Secret comment',
+        isAuthorOnly: true,
+        isDeleted: false,
+      });
+
+      await expect(
+        service.findOne('secret-c1', false, 'unauthorized-reader'),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should allow comment creator to access author-only comment in findOne', async () => {
+      mockCommentRepo.findOne.mockResolvedValueOnce({
+        id: 'secret-c1',
+        storyId: 'valid-story-id',
+        userId: 'creator-user',
+        content: 'Secret comment',
+        isAuthorOnly: true,
+        isDeleted: false,
+      });
+      mockCommentRepo.find.mockResolvedValueOnce([]);
+
+      const result = await service.findOne('secret-c1', false, 'creator-user');
+      expect(result.id).toBe('secret-c1');
+    });
+
+    it('should allow story author to access author-only comment in findOne', async () => {
+      mockCommentRepo.findOne.mockResolvedValueOnce({
+        id: 'secret-c1',
+        storyId: 'valid-story-id',
+        userId: 'creator-user',
+        content: 'Secret comment',
+        isAuthorOnly: true,
+        isDeleted: false,
+      });
+      mockCommentRepo.find.mockResolvedValueOnce([]);
+
+      const result = await service.findOne(
+        'secret-c1',
+        false,
+        'story-author-user',
+      );
+      expect(result.id).toBe('secret-c1');
+    });
+
+    it('should allow admin to access author-only comment in findOne', async () => {
+      mockCommentRepo.findOne.mockResolvedValueOnce({
+        id: 'secret-c1',
+        storyId: 'valid-story-id',
+        userId: 'creator-user',
+        content: 'Secret comment',
+        isAuthorOnly: true,
+        isDeleted: false,
+      });
+      mockCommentRepo.find.mockResolvedValueOnce([]);
+
+      const result = await service.findOne('secret-c1', true, 'admin-user');
+      expect(result.id).toBe('secret-c1');
+    });
   });
 
   describe('getSceneCommentCounts', () => {
     it('should aggregate comment counts and spoiler counts by sceneName', async () => {
-      mockCommentRepo.find.mockResolvedValueOnce([
-        { id: '1', position: { sceneName: 'intro' }, isSpoiler: false },
-        { id: '2', position: { sceneName: 'intro' }, isSpoiler: true },
-        { id: '3', position: { sceneName: 'chapter_1' }, isSpoiler: false },
-        { id: '4', position: null, isSpoiler: false },
-      ]);
+      const mockQb: any = {
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        select: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValueOnce([
+          { id: '1', position: { sceneName: 'intro' }, isSpoiler: false },
+          { id: '2', position: { sceneName: 'intro' }, isSpoiler: true },
+          { id: '3', position: { sceneName: 'chapter_1' }, isSpoiler: false },
+          { id: '4', position: null, isSpoiler: false },
+        ]),
+      };
+      mockCommentRepo.createQueryBuilder.mockReturnValue(mockQb);
 
       const counts = await service.getSceneCommentCounts('valid-story-id');
 
@@ -748,6 +957,48 @@ describe('CommentService', () => {
         intro: { total: 2, spoilers: 1 },
         chapter_1: { total: 1, spoilers: 0 },
       });
+    });
+
+    it('should filter out author-only comments from scene count for unauthorized reader', async () => {
+      const mockQb: any = {
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        select: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValueOnce([]),
+      };
+      mockCommentRepo.createQueryBuilder.mockReturnValue(mockQb);
+
+      await service.getSceneCommentCounts(
+        'valid-story-id',
+        'reader-user',
+        false,
+      );
+
+      expect(mockQb.andWhere).toHaveBeenCalledWith(
+        '(comment.isAuthorOnly = :authFalse OR comment.userId = :currentUserId)',
+        { authFalse: false, currentUserId: 'reader-user' },
+      );
+    });
+
+    it('should include author-only comments in scene count for story author or admin', async () => {
+      const mockQb: any = {
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        select: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValueOnce([]),
+      };
+      mockCommentRepo.createQueryBuilder.mockReturnValue(mockQb);
+
+      await service.getSceneCommentCounts(
+        'valid-story-id',
+        'story-author-user',
+        false,
+      );
+
+      expect(mockQb.andWhere).not.toHaveBeenCalledWith(
+        expect.stringContaining('comment.isAuthorOnly = :authFalse'),
+        expect.anything(),
+      );
     });
   });
 

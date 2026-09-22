@@ -24,6 +24,7 @@ export interface CommentItem {
   replyToId?: string | null;
   replyToUserId?: string | null;
   isSpoiler: boolean;
+  isAuthorOnly?: boolean;
   position?: CommentPosition | null;
   isDeleted: boolean;
   isBlocked: boolean;
@@ -43,6 +44,7 @@ export interface CreateCommentPayload {
   replyToId?: string;
   replyToUserId?: string;
   isSpoiler?: boolean;
+  isAuthorOnly?: boolean;
   position?: CommentPosition;
 }
 
@@ -54,6 +56,7 @@ export interface QueryCommentsParams {
   hasPosition?: boolean;
   tree?: boolean;
   includeSpoilers?: boolean;
+  isAuthorOnly?: boolean;
   limit?: number;
   page?: number;
   createdAt?: number;
