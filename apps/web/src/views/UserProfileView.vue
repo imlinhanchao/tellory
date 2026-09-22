@@ -36,10 +36,6 @@
               <Icon icon="mdi:alert-circle-outline" class="text-xs" /> 未激活
             </span>
           </div>
-          <div v-else class="text-sm text-warning flex items-center gap-2">
-            <Icon icon="mdi:alert-circle-outline" />
-            <span>未设置邮箱（未验证用户无法创建新故事）</span>
-          </div>
         </template>
 
         <div class="flex gap-6 text-base-content/70">
