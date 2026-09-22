@@ -53,6 +53,30 @@
         </div>
       </div>
 
+      <!-- 故事更新提示 Alert -->
+      <transition name="slide-fade">
+        <div
+          v-if="showUpdateAlert"
+          role="alert"
+          class="alert alert-info alert-soft mb-4 rounded-xl shadow-xs font-sans text-xs flex items-center justify-between gap-3 border border-info/20"
+        >
+          <div class="flex items-center gap-2 min-w-0">
+            <Icon icon="mdi:information-outline" class="size-4 shrink-0 text-info" />
+            <span class="text-base-content/90">
+              故事已发布更新，当前阅读内容基于更新前的版本。
+            </span>
+          </div>
+          <button
+            type="button"
+            class="btn btn-ghost btn-xs btn-circle shrink-0 text-base-content/50 hover:text-base-content"
+            title="关闭提示"
+            @click="dismissUpdateAlert"
+          >
+            <Icon icon="mdi:close" class="size-3.5" />
+          </button>
+        </div>
+      </transition>
+
       <!-- 故事主卡片 -->
       <article
         class="bg-base-100/90 shadow-sm hover:shadow-md transition-shadow duration-300 rounded-2xl p-6 sm:p-12 border border-base-300/60 min-h-[60vh] flex flex-col justify-between"
@@ -822,6 +846,65 @@ const isEnding = ref(false);
 const sceneRenderKey = ref(0);
 const undoing = ref(false);
 
+// 故事更新检测与关闭状态（按更新时间戳记录，关闭后直到下次更新才再次提醒）
+const dismissedUpdateVersion = ref<number>(0);
+
+const storyUpdatedTime = computed(() => {
+  if (!story.value) return 0;
+  return (
+    Number(
+      route.name === "test"
+        ? story.value.updatedAt || story.value.approvedAt
+        : story.value.approvedAt || story.value.updatedAt,
+    ) || 0
+  );
+});
+
+const isStoryUpdated = computed(() => {
+  if (!play.value?.id || !story.value) return false;
+
+  const playCreatedAt = Number(play.value.createdAt || 0);
+  const storyUpdatedAt = storyUpdatedTime.value;
+
+  if (!playCreatedAt || !storyUpdatedAt) return false;
+
+  return storyUpdatedAt > playCreatedAt;
+});
+
+const showUpdateAlert = computed(() => {
+  if (!isStoryUpdated.value || showModal.value) return false;
+  return dismissedUpdateVersion.value < storyUpdatedTime.value;
+});
+
+function initDismissedUpdate() {
+  const sid = storyId.value;
+  if (!sid) return;
+  try {
+    const saved = localStorage.getItem(`dismissed_story_update_${sid}`);
+    if (saved) {
+      dismissedUpdateVersion.value = Number(saved) || 0;
+    }
+  } catch {
+    // 忽略 localStorage 异常
+  }
+}
+
+function dismissUpdateAlert() {
+  const sid = storyId.value;
+  const currentStoryTime = storyUpdatedTime.value;
+  dismissedUpdateVersion.value = currentStoryTime;
+  if (sid && currentStoryTime) {
+    try {
+      localStorage.setItem(
+        `dismissed_story_update_${sid}`,
+        String(currentStoryTime),
+      );
+    } catch {
+      // 忽略 localStorage 异常
+    }
+  }
+}
+
 const commentSectionRef = ref<any>(null);
 
 // 划线操作与选区
@@ -1003,6 +1086,7 @@ async function startPlay() {
     isEnding.value = false;
     variables.value = (res as any).variables || {};
     showModal.value = false;
+    dismissUpdateAlert();
     nextTick(() => {
       refreshSceneCommentsAndMarks();
     });
@@ -1018,6 +1102,8 @@ async function confirmRestart() {
   currentHtml.value = res.html || "";
   isEnding.value = false;
   variables.value = (res as any).variables || {};
+  dismissUpdateAlert();
+  Message.success("已重新开始故事");
   nextTick(() => {
     refreshSceneCommentsAndMarks();
   });
@@ -1079,6 +1165,7 @@ onMounted(async () => {
   document.addEventListener("selectionchange", handleSelectionChange);
 
   await loadStory();
+  initDismissedUpdate();
   await loadReaders();
   const started = await loadExistingPlay();
   if (started) {

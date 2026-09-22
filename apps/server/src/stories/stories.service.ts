@@ -202,6 +202,7 @@ export class StoriesService {
     return story
       ? {
           ...story,
+          updatedAt: Number(story.approvedAt),
           tags: story.tags?.split(',') || [],
           author,
         }
