@@ -184,6 +184,12 @@ export function renderCommentMarks(
         mark.className = "tellory-comment-mark cursor-pointer text-inherit";
         mark.setAttribute("data-quote", quote);
 
+        // 记录关联的全部评论与回复 ID，以便消息通知跳转时快速定位
+        const commentIds = group
+          .map((c) => c.id)
+          .concat(group.flatMap((c) => (c.replies || []).map((r) => r.id)));
+        mark.setAttribute("data-comment-ids", commentIds.join(","));
+
         mark.addEventListener("click", (e) => {
           e.stopPropagation();
           onMarkClick(group, mark, e);

@@ -7,6 +7,7 @@ import { CommentController } from './comment.controller';
 import { UsersModule } from '../users/users.module';
 import { StoriesModule } from '../stories/stories.module';
 import { PlayModule } from '../play/play.module';
+import { NotificationModule } from '../notification/notification.module';
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { PlayModule } from '../play/play.module';
     UsersModule,
     StoriesModule,
     PlayModule,
+    NotificationModule,
   ],
   providers: [CommentService],
   controllers: [CommentController],

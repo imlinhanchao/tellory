@@ -11,6 +11,7 @@ import { CommentReport } from './comment-report.entity';
 import { UsersService } from '../users/users.service';
 import { StoriesService } from '../stories/stories.service';
 import { PlayService } from '../play/play.service';
+import { NotificationService } from '../notification/notification.service';
 
 describe('CommentService', () => {
   let service: CommentService;
@@ -19,6 +20,7 @@ describe('CommentService', () => {
   let mockUsersService: any;
   let mockStoriesService: any;
   let mockPlayService: any;
+  let mockNotificationService: any;
 
   beforeEach(async () => {
     mockCommentRepo = {
@@ -117,6 +119,14 @@ describe('CommentService', () => {
       }),
     };
 
+    mockNotificationService = {
+      create: jest.fn().mockResolvedValue({ id: 'notif-1' }),
+      notifyStoryComment: jest.fn().mockResolvedValue({ id: 'notif-1' }),
+      notifyCommentReply: jest.fn().mockResolvedValue({ id: 'notif-2' }),
+      notifyStoryUpdate: jest.fn().mockResolvedValue(1),
+      notifyStoryApproved: jest.fn().mockResolvedValue({ id: 'notif-3' }),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         CommentService,
@@ -139,6 +149,10 @@ describe('CommentService', () => {
         {
           provide: PlayService,
           useValue: mockPlayService,
+        },
+        {
+          provide: NotificationService,
+          useValue: mockNotificationService,
         },
       ],
     }).compile();
@@ -396,6 +410,48 @@ describe('CommentService', () => {
         expect.objectContaining({
           parentId: 'author-only-root',
           isAuthorOnly: true,
+        }),
+      );
+    });
+
+    it('should call notifyStoryComment when root story comment is created', async () => {
+      await service.create('user-commenter', {
+        storyId: 'valid-story-id',
+        content: 'I love this story',
+      });
+
+      expect(mockNotificationService.notifyStoryComment).toHaveBeenCalledWith(
+        expect.objectContaining({
+          storyAuthorId: 'story-author-user',
+          commenterId: 'user-commenter',
+          storyId: 'valid-story-id',
+          commentContent: 'I love this story',
+        }),
+      );
+    });
+
+    it('should call notifyCommentReply when comment reply is created', async () => {
+      mockCommentRepo.findOne.mockResolvedValueOnce({
+        id: 'root-comment-id',
+        storyId: 'valid-story-id',
+        userId: 'user-parent',
+        content: 'Original comment',
+        parentId: null,
+        isDeleted: false,
+      });
+
+      await service.create('user-replier', {
+        storyId: 'valid-story-id',
+        content: 'Replying to you',
+        parentId: 'root-comment-id',
+      });
+
+      expect(mockNotificationService.notifyCommentReply).toHaveBeenCalledWith(
+        expect.objectContaining({
+          targetUserId: 'user-parent',
+          replierId: 'user-replier',
+          storyId: 'valid-story-id',
+          replyContent: 'Replying to you',
         }),
       );
     });

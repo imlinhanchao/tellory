@@ -20,6 +20,7 @@ import {
 import { UsersService } from '../users/users.service';
 import { StoriesService } from '../stories/stories.service';
 import { PlayService } from '../play/play.service';
+import { NotificationService } from '../notification/notification.service';
 import { parseStorySource } from 'tellory';
 import { extractSceneReferencedVariables } from './comment-variable.util';
 
@@ -65,6 +66,8 @@ export class CommentService {
     private readonly storiesService: StoriesService,
     @Optional()
     private readonly playService?: PlayService,
+    @Optional()
+    private readonly notificationService?: NotificationService,
   ) {}
 
   /**
@@ -362,7 +365,114 @@ export class CommentService {
 
     const saved = await this.commentRepo.save(comment);
     const [detailed] = await this.attachUserDetails([saved]);
+
+    // 发送站内通知（捕获异常避免影响评论创建）
+    await this.sendCommentNotification(saved, userId).catch((err) => {
+      console.error('发送评论通知失败:', err);
+    });
+
     return detailed;
+  }
+
+  /**
+   * 发送评论/回复相关的站内信通知
+   */
+  private async sendCommentNotification(
+    comment: Comment,
+    commenterId: string,
+  ): Promise<void> {
+    if (!this.notificationService) return;
+
+    try {
+      let storyTitle = '故事';
+      let shortname: string | undefined;
+      const approved = await this.storiesService.getApprovedByIds([
+        comment.storyId,
+      ]);
+      if (approved && approved.length > 0) {
+        storyTitle = approved[0].title || '未命名故事';
+        shortname = approved[0].shortname;
+      } else {
+        const stories = await this.storiesService.getStorysByIds([
+          comment.storyId,
+        ]);
+        if (stories && stories.length > 0) {
+          storyTitle = stories[0].title || '未命名故事';
+          shortname = stories[0].shortname;
+        }
+      }
+
+      if (!comment.parentId) {
+        // 1. 有人评论了自己的故事（根评论，包括常规故事评论与划词评论）
+        let pos: any = comment.position;
+        if (typeof pos === 'string') {
+          try {
+            pos = JSON.parse(pos);
+          } catch {
+            pos = null;
+          }
+        }
+        const isInline = Boolean(pos && pos.selectedText);
+        const sceneName = pos?.sceneName;
+        const selectedText = pos?.selectedText;
+
+        const storyAuthorId = await this.getStoryAuthorId(comment.storyId);
+        if (storyAuthorId && storyAuthorId !== commenterId) {
+          await this.notificationService.notifyStoryComment({
+            storyAuthorId,
+            commenterId,
+            storyId: comment.storyId,
+            storyTitle,
+            shortname,
+            commentId: comment.id,
+            commentContent: comment.content,
+            isInline,
+            sceneName,
+            selectedText,
+          });
+        }
+      } else if (
+        comment.replyToUserId &&
+        comment.replyToUserId !== commenterId
+      ) {
+        // 2. 回复了自己的评论
+        let rootComment: Comment | null = null;
+        if (comment.parentId) {
+          rootComment = await this.commentRepo.findOne({
+            where: { id: comment.parentId },
+          });
+        }
+        let pos: any = rootComment?.position;
+        if (typeof pos === 'string') {
+          try {
+            pos = JSON.parse(pos);
+          } catch {
+            pos = null;
+          }
+        }
+        const isInline = Boolean(pos && pos.selectedText);
+        const sceneName = pos?.sceneName;
+        const selectedText = pos?.selectedText;
+        const rootCommentId = rootComment?.id;
+
+        await this.notificationService.notifyCommentReply({
+          targetUserId: comment.replyToUserId,
+          replierId: commenterId,
+          storyId: comment.storyId,
+          storyTitle,
+          shortname,
+          commentId: comment.id,
+          replyContent: comment.content,
+          isInline,
+          isInlineReply: isInline,
+          rootCommentId,
+          sceneName,
+          selectedText,
+        });
+      }
+    } catch (err) {
+      console.error('处理评论通知失败:', err);
+    }
   }
 
   /**

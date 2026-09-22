@@ -8,6 +8,7 @@ import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { StoriesModule } from './stories/stories.module';
 import { CommentModule } from './comment/comment.module';
+import { NotificationModule } from './notification/notification.module';
 import { ConfigModule } from './config/config.module';
 import { join } from 'path';
 
@@ -28,6 +29,7 @@ import { join } from 'path';
         StoriesModule,
         PlayModule,
         CommentModule,
+        NotificationModule,
       ]
     : [ConfigModule],
   controllers: [AppController],

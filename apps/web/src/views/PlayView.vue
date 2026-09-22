@@ -261,7 +261,8 @@
           <div
             v-for="c in activeQuoteComments"
             :key="c.id"
-            class="p-3 bg-base-200/40 rounded-xl border border-base-200/80 space-y-2 text-xs"
+            :id="`quote-comment-${c.id}`"
+            class="p-3 bg-base-200/40 rounded-xl border border-base-200/80 space-y-2 text-xs transition-colors duration-300"
           >
             <div class="flex items-center justify-between gap-2">
               <div class="flex items-center gap-2">
@@ -392,7 +393,8 @@
               <div
                 v-for="reply in c.replies"
                 :key="reply.id"
-                class="sub-reply space-y-1 text-xs"
+                :id="`quote-comment-${reply.id}`"
+                class="sub-reply space-y-1 text-xs transition-colors duration-300"
               >
                 <div class="flex items-center justify-between gap-2">
                   <div class="flex items-center gap-1.5 flex-wrap">
@@ -1058,6 +1060,11 @@ function applySceneHtml(nextHtml: string, withPageTurn: boolean) {
 
 function onSceneAfterEnter() {
   refreshSceneCommentsAndMarks();
+  if (route.query.commentId) {
+    setTimeout(() => {
+      locateComment(route.query.commentId as string);
+    }, 150);
+  }
 }
 
 function closeModal() {
@@ -1076,12 +1083,19 @@ onMounted(async () => {
   const started = await loadExistingPlay();
   if (started) {
     showModal.value = false;
+  } else if (route.query.commentId) {
+    await startPlay();
   } else {
     showModal.value = true;
   }
-  nextTick(() => {
-    refreshSceneCommentsAndMarks();
-  });
+  await nextTick();
+  await refreshSceneCommentsAndMarks();
+
+  if (route.query.commentId) {
+    setTimeout(() => {
+      locateComment(route.query.commentId as string);
+    }, 250);
+  }
 });
 
 // 选区检测与悬浮按钮定位
@@ -1392,6 +1406,94 @@ watch(contentRef, (el) => {
     });
   }
 });
+
+function triggerFlashAnimation(el: HTMLElement, className: string) {
+  el.classList.remove(className);
+  void el.offsetWidth;
+  el.classList.add(className);
+  setTimeout(() => {
+    el.classList.remove(className);
+  }, 4000);
+}
+
+async function locateComment(commentId: string) {
+  if (!commentId) return;
+  await nextTick();
+
+  // 若当前场景的评论尚未加载完成，先执行刷新
+  if (sceneMatchingComments.value.length === 0) {
+    await refreshSceneCommentsAndMarks();
+    await nextTick();
+  }
+
+  // 1. 检查是否匹配当前场景中的划词评论或回复
+  const matchingGroup = sceneMatchingComments.value.filter(
+    (c) => c.id === commentId || c.replies?.some((r) => r.id === commentId),
+  );
+
+  if (matchingGroup.length > 0) {
+    const isReply = matchingGroup.some((c) =>
+      c.replies?.some((r) => r.id === commentId),
+    );
+
+    // 查找文本中标记的对应 mark 元素
+    const markEl = contentRef.value?.querySelector(
+      `mark[data-comment-ids*="${commentId}"]`,
+    ) as HTMLElement | null;
+
+    if (!isReply) {
+      // 划词根评论：在划词处滚动并闪烁
+      if (markEl) {
+        markEl.scrollIntoView({ behavior: "smooth", block: "center" });
+        triggerFlashAnimation(markEl, "tellory-mark-flash");
+      }
+      return;
+    } else {
+      // 回复的划词评论：打开划词评论弹框并滚动到对应的回复
+      activeQuoteComments.value = matchingGroup;
+      activeQuoteText.value =
+        matchingGroup[0]?.position?.selectedText ||
+        markEl?.getAttribute("data-quote") ||
+        "";
+      // 自动展开此回复以及根评论的剧透遮盖
+      revealedQuoteSpoilers.value.add(commentId);
+      matchingGroup.forEach((c) => revealedQuoteSpoilers.value.add(c.id));
+      cancelQuoteReply();
+      showQuoteCommentsModal.value = true;
+
+      await nextTick();
+      setTimeout(() => {
+        const replyEl = document.getElementById(`quote-comment-${commentId}`);
+        if (replyEl) {
+          replyEl.scrollIntoView({ behavior: "smooth", block: "center" });
+          triggerFlashAnimation(replyEl, "comment-reply-flash");
+        }
+      }, 150);
+      return;
+    }
+  }
+
+  // 2. 如果当前场景没有该划词评论，提示场景差异（如果是跨场景的划词评论）
+  const targetScene = route.query.scene as string | undefined;
+  if (targetScene && targetScene !== currentPassageName.value) {
+    Message.info(
+      `该评论位于场景「${targetScene}」，当前阅读场景为「${currentPassageName.value}」`,
+      3500,
+    );
+  }
+
+  // 3. 定位到下方常规故事评论区
+  commentSectionRef.value?.scrollToComment(commentId);
+}
+
+watch(
+  () => route.query.commentId,
+  (newCommentId) => {
+    if (newCommentId) {
+      locateComment(newCommentId as string);
+    }
+  },
+);
 
 async function onContentClick(e: MouseEvent) {
   const targetEl = (e.target as HTMLElement)?.closest(
@@ -1724,5 +1826,54 @@ const isTest = computed(
 :deep(.tellory-comment-mark:hover .tellory-mark-badge) {
   transform: scale(1.08);
   filter: brightness(1.08);
+}
+
+/* 划词评论定位时的闪烁高亮动画 */
+:deep(.tellory-comment-mark.tellory-mark-flash) {
+  animation: tellory-quote-flash 1.2s ease-in-out 3;
+  text-decoration: underline dashed var(--color-primary, #646cff) !important;
+  text-underline-offset: 4px;
+  text-decoration-thickness: 2px;
+}
+
+:deep(.tellory-comment-mark.tellory-mark-flash .tellory-mark-badge) {
+  animation: tellory-badge-pulse 1.2s ease-in-out 3;
+}
+
+@keyframes tellory-quote-flash {
+  0%, 100% {
+    background-color: transparent;
+  }
+  50% {
+    background-color: color-mix(in oklch, var(--color-primary, #646cff) 35%, transparent);
+    box-shadow: 0 0 0 4px color-mix(in oklch, var(--color-primary, #646cff) 30%, transparent);
+    border-radius: 4px;
+  }
+}
+
+@keyframes tellory-badge-pulse {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.4);
+    box-shadow: 0 0 8px var(--color-primary, #646cff);
+  }
+}
+
+/* 划词评论弹窗内被定位回复的高亮闪烁动画 */
+:deep(.comment-reply-flash) {
+  animation: reply-card-flash 1.2s ease-in-out 3;
+}
+
+@keyframes reply-card-flash {
+  0%, 100% {
+    background-color: transparent;
+  }
+  50% {
+    background-color: color-mix(in oklch, var(--color-primary, #646cff) 25%, transparent);
+    box-shadow: 0 0 0 3px var(--color-primary, #646cff);
+    border-radius: 8px;
+  }
 }
 </style>

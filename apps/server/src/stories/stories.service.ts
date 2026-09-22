@@ -9,6 +9,7 @@ import { omit } from 'src/utils';
 import { FingerTo } from 'fishpi';
 import { ConfigService } from 'src/config/config.service';
 import { isMailConfigured, sendStoryApprovedMail } from '../lib/mail';
+import { NotificationService } from 'src/notification/notification.service';
 
 type PublicStory = {
   id: string;
@@ -33,6 +34,7 @@ export class StoriesService {
     @InjectRepository(ApprovedStory)
     private approvedRepo: Repository<ApprovedStory>,
     private readonly usersService: UsersService,
+    private readonly notificationService: NotificationService,
   ) {}
 
   private buildWhereForStories(
@@ -463,6 +465,31 @@ export class StoriesService {
     } else {
       result = await this.approvedRepo.save(approved);
     }
+
+    // 1. 发送站内信通知：故事审核通过
+    await this.notificationService
+      .notifyStoryApproved({
+        authorId: story.authorId,
+        adminId,
+        storyId: story.id,
+        storyTitle: story.title,
+        shortname: story.shortname,
+      })
+      .catch((err) => console.error('发送故事审核通过通知失败:', err));
+
+    // 2. 如果故事存在历史发布（或有玩家在玩），发送站内信通知：正在玩的故事发布了更新
+    const storyKeys = [story.id, story.shortname, existing?.id].filter(
+      Boolean,
+    ) as string[];
+    await this.notificationService
+      .notifyStoryUpdate({
+        storyId: story.id,
+        storyTitle: story.title,
+        shortname: story.shortname,
+        authorId: story.authorId,
+        keys: storyKeys,
+      })
+      .catch((err) => console.error('发送故事更新通知失败:', err));
 
     await this.sendReviewNotice(story, 'approved', undefined, domain);
     return result;

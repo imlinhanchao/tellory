@@ -6,9 +6,14 @@ import { StoriesService } from './stories.service';
 import { StoriesController } from './stories.controller';
 import { UsersModule } from 'src/users/users.module';
 import { StoryRuntimeService } from './story-runtime.service';
+import { NotificationModule } from '../notification/notification.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Story, ApprovedStory]), UsersModule],
+  imports: [
+    TypeOrmModule.forFeature([Story, ApprovedStory]),
+    UsersModule,
+    NotificationModule,
+  ],
   providers: [StoriesService, StoryRuntimeService],
   controllers: [StoriesController],
   exports: [StoriesService, StoryRuntimeService],

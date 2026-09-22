@@ -89,7 +89,8 @@
       <div
         v-for="comment in visibleComments"
         :key="comment.id"
-        class="comment-thread group/thread border-b border-base-200/60 pb-6 last:border-none last:pb-0"
+        :id="`comment-${comment.id}`"
+        class="comment-thread group/thread border-b border-base-200/60 pb-6 last:border-none last:pb-0 transition-colors duration-300"
       >
         <!-- 根评论主体 -->
         <div class="flex gap-3 sm:gap-4 items-start">
@@ -276,7 +277,8 @@
               <div
                 v-for="reply in comment.replies"
                 :key="reply.id"
-                class="sub-reply flex gap-2.5 sm:gap-3 items-start group/sub"
+                :id="`comment-${reply.id}`"
+                class="sub-reply flex gap-2.5 sm:gap-3 items-start group/sub transition-colors duration-300"
               >
                 <Avatar
                   :user="reply.author"
@@ -565,7 +567,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from "vue";
+import { ref, computed, onMounted, watch, nextTick } from "vue";
 import Icon from "@/components/Icon/src/Icon.vue";
 import Avatar from "@/components/Avatar/src/Avatar.vue";
 import { Message } from "@/components/msg";
@@ -899,6 +901,28 @@ async function handleUnblock(c: CommentItem) {
 
 
 
+async function scrollToComment(commentId: string) {
+  if (!commentId) return;
+  await nextTick();
+
+  if (comments.value.length === 0 && !loading.value) {
+    await loadComments(true);
+    await nextTick();
+  }
+
+  const targetEl = document.getElementById(`comment-${commentId}`);
+  if (targetEl) {
+    revealedSpoilers.value.add(commentId);
+    targetEl.scrollIntoView({ behavior: "smooth", block: "center" });
+    targetEl.classList.remove("comment-highlight-flash");
+    void targetEl.offsetWidth;
+    targetEl.classList.add("comment-highlight-flash");
+    setTimeout(() => {
+      targetEl.classList.remove("comment-highlight-flash");
+    }, 4000);
+  }
+}
+
 // 监听 storyId 变化重载评论
 watch(
   () => props.storyId,
@@ -909,6 +933,7 @@ watch(
 
 defineExpose({
   loadComments,
+  scrollToComment,
 });
 
 onMounted(() => {
@@ -919,6 +944,21 @@ onMounted(() => {
 <style scoped>
 .comment-section {
   animation: fadeIn 0.3s ease-out;
+}
+
+.comment-highlight-flash {
+  animation: comment-card-flash 1.2s ease-in-out 3;
+}
+
+@keyframes comment-card-flash {
+  0%, 100% {
+    background-color: transparent;
+  }
+  50% {
+    background-color: color-mix(in oklch, var(--color-primary, #646cff) 18%, transparent);
+    box-shadow: 0 0 0 3px color-mix(in oklch, var(--color-primary, #646cff) 25%, transparent);
+    border-radius: 8px;
+  }
 }
 
 @keyframes fadeIn {
