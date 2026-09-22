@@ -102,6 +102,14 @@
           </div>
         </footer>
       </article>
+
+      <!-- 文章下方评论区 -->
+      <CommentSection
+        v-if="storyId"
+        class="mt-8"
+        :story-id="storyId"
+        :scene-name="play?.passage || play?.currentPassage"
+      />
     </main>
 
     <VariableInspector
@@ -343,6 +351,7 @@ import { useAuthStore } from "@/stores/modules/auth";
 import VariableInspector from "@/components/debug/VariableInspector.vue";
 import JsonView from "@/components/debug/JsonView.vue";
 import Icon from "@/components/Icon/src/Icon.vue";
+import CommentSection from "@/components/comment/CommentSection.vue";
 
 const route = useRoute();
 const router = useRouter();
