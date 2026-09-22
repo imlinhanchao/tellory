@@ -49,6 +49,7 @@ export interface CreateCommentPayload {
 export interface QueryCommentsParams {
   storyId: string;
   sceneName?: string;
+  currentSceneName?: string;
   parentId?: string;
   hasPosition?: boolean;
   tree?: boolean;
@@ -56,6 +57,48 @@ export interface QueryCommentsParams {
   limit?: number;
   page?: number;
   createdAt?: number;
+  variables?: string | Record<string, any>;
+}
+
+export function matchVariableSnapshot(
+  snapshot?: Record<string, any> | string | null,
+  currentVariables?: Record<string, any> | string | null,
+): boolean {
+  let parsedSnapshot = snapshot;
+  if (typeof parsedSnapshot === "string") {
+    try {
+      parsedSnapshot = JSON.parse(parsedSnapshot);
+    } catch {
+      return false;
+    }
+  }
+  if (
+    !parsedSnapshot ||
+    typeof parsedSnapshot !== "object" ||
+    Object.keys(parsedSnapshot).length === 0
+  ) {
+    return true;
+  }
+  let parsedVars = currentVariables;
+  if (typeof parsedVars === "string") {
+    try {
+      parsedVars = JSON.parse(parsedVars);
+    } catch {
+      return false;
+    }
+  }
+  if (!parsedVars || typeof parsedVars !== "object") {
+    return false;
+  }
+  for (const [key, expectedVal] of Object.entries(parsedSnapshot)) {
+    const actualVal =
+      parsedVars[key] !== undefined ? parsedVars[key] : 0;
+    const normExpected = expectedVal !== undefined ? expectedVal : 0;
+    if (JSON.stringify(actualVal) !== JSON.stringify(normExpected)) {
+      return false;
+    }
+  }
+  return true;
 }
 
 export function getComments(params: QueryCommentsParams) {
@@ -67,7 +110,11 @@ export function getComments(params: QueryCommentsParams) {
       value !== "" &&
       value !== "undefined"
     ) {
-      cleanParams[key] = value;
+      if (key === "variables" && typeof value === "object") {
+        cleanParams[key] = JSON.stringify(value);
+      } else {
+        cleanParams[key] = value;
+      }
     }
   }
   return request.get<{

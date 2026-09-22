@@ -6,12 +6,14 @@ import { CommentService } from './comment.service';
 import { CommentController } from './comment.controller';
 import { UsersModule } from '../users/users.module';
 import { StoriesModule } from '../stories/stories.module';
+import { PlayModule } from '../play/play.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Comment, CommentReport]),
     UsersModule,
     StoriesModule,
+    PlayModule,
   ],
   providers: [CommentService],
   controllers: [CommentController],

@@ -10,8 +10,9 @@ import {
 import { Type, Transform } from 'class-transformer';
 
 export class CommentPositionDto {
+  @IsOptional()
   @IsString()
-  sceneName: string;
+  sceneName?: string;
 
   @IsOptional()
   @IsNumber()
@@ -97,21 +98,37 @@ export class QueryCommentsDto {
 
   @IsOptional()
   @IsString()
+  currentSceneName?: string;
+
+  @IsOptional()
+  @IsString()
   parentId?: string;
 
   @IsOptional()
   @IsBoolean()
-  @Transform(({ value }) => value === 'true' || value === true || value === '1')
+  @Transform(({ value }) =>
+    value === undefined || value === null || value === ''
+      ? undefined
+      : value === 'true' || value === true || value === '1',
+  )
   hasPosition?: boolean;
 
   @IsOptional()
   @IsBoolean()
-  @Transform(({ value }) => value === 'true' || value === true || value === '1')
+  @Transform(({ value }) =>
+    value === undefined || value === null || value === ''
+      ? undefined
+      : value === 'true' || value === true || value === '1',
+  )
   tree?: boolean;
 
   @IsOptional()
   @IsBoolean()
-  @Transform(({ value }) => value === 'true' || value === true || value === '1')
+  @Transform(({ value }) =>
+    value === undefined || value === null || value === ''
+      ? undefined
+      : value === 'true' || value === true || value === '1',
+  )
   includeSpoilers?: boolean;
 
   @IsOptional()
@@ -131,8 +148,16 @@ export class QueryCommentsDto {
 
   @IsOptional()
   @IsBoolean()
-  @Transform(({ value }) => value === 'true' || value === true || value === '1')
+  @Transform(({ value }) =>
+    value === undefined || value === null || value === ''
+      ? undefined
+      : value === 'true' || value === true || value === '1',
+  )
   includeBlocked?: boolean;
+
+  @IsOptional()
+  @IsString()
+  variables?: string;
 
   @IsOptional()
   t?: any;

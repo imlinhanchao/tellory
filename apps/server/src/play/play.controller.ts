@@ -66,9 +66,18 @@ export class PlayController {
 
     const lastPlay = await this.playService.findLatestByStoryId(id, userId);
     if (lastPlay?.isEnding === false) {
+      const canAccessVariables =
+        lastPlay.userId === userId ||
+        story.authorId === userId ||
+        req.user?.isAdmin ||
+        false;
       return {
+        ...lastPlay,
+        currentPassage: lastPlay.currentPassage,
+        passage: lastPlay.currentPassage,
         html: lastPlay.html,
         history: lastPlay.history || [],
+        variables: canAccessVariables ? lastPlay.variables : {},
       };
     }
 
@@ -91,12 +100,18 @@ export class PlayController {
       html: runtime.html,
     };
     const created = await this.playService.create(payload);
-    const isAuthorOrAdmin =
-      story.authorId === userId || req.user?.isAdmin || false;
+    const canAccessVariables =
+      created.userId === userId ||
+      story.authorId === userId ||
+      req.user?.isAdmin ||
+      false;
     return {
+      ...created,
+      currentPassage: runtime.passage,
+      passage: runtime.passage,
       html: created.html,
       history: [],
-      variables: isAuthorOrAdmin ? created.variables : {},
+      variables: canAccessVariables ? created.variables : {},
     };
   }
 
@@ -109,6 +124,8 @@ export class PlayController {
       p.userId === req.user?.userId || req.user?.isAdmin || false;
     return {
       ...p,
+      currentPassage: p.currentPassage,
+      passage: p.currentPassage,
       variables: isAuthorOrAdmin ? p.variables || {} : {},
       history: p.history || [],
     };
@@ -163,6 +180,8 @@ export class PlayController {
 
       return {
         ...updated,
+        currentPassage: runtimeRes.passage,
+        passage: runtimeRes.passage,
         variables: isAuthorOrAdmin ? updated.variables || {} : {},
         history: updated.history || [],
         html: runtimeRes.html,
@@ -264,6 +283,8 @@ export class PlayController {
       if (!updated) return null;
       return {
         ...updated,
+        currentPassage: runtimeRes.passage,
+        passage: runtimeRes.passage,
         variables: isAuthorOrAdmin ? updated.variables || {} : {},
         history: updated.history || [],
         html: runtimeRes.html,

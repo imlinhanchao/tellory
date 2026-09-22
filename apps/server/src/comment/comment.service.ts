@@ -3,6 +3,7 @@ import {
   NotFoundException,
   BadRequestException,
   ForbiddenException,
+  Optional,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In, Not } from 'typeorm';
@@ -18,6 +19,9 @@ import {
 } from './comment.dto';
 import { UsersService } from '../users/users.service';
 import { StoriesService } from '../stories/stories.service';
+import { PlayService } from '../play/play.service';
+import { parseStorySource } from 'tellory';
+import { extractSceneReferencedVariables } from './comment-variable.util';
 
 export interface CommentUserSummary {
   id: string;
@@ -58,6 +62,8 @@ export class CommentService {
     private readonly reportRepo: Repository<CommentReport>,
     private readonly usersService: UsersService,
     private readonly storiesService: StoriesService,
+    @Optional()
+    private readonly playService?: PlayService,
   ) {}
 
   /**
@@ -74,16 +80,34 @@ export class CommentService {
   }
 
   /**
-   * 规范化划词评论位置信息
+   * 规范化并自动解析划词评论位置及变量快照
    */
-  private normalizePosition(
+  private async resolveAndNormalizePosition(
+    storyId: string,
+    userId: string,
     position?: CreateCommentDto['position'],
-  ): CommentPosition | null {
+  ): Promise<CommentPosition | null> {
     if (!position) return null;
 
-    const sceneName = position.sceneName || position.passageName;
+    let sceneName = position.sceneName || position.passageName;
+
+    let play: any = null;
+    if (this.playService) {
+      try {
+        play = await this.playService.findLatestByStoryId(storyId, userId);
+      } catch (err) {
+        console.warn('[CommentService] findLatestByStoryId failed:', err);
+      }
+    }
+
+    if (!sceneName && (play?.currentPassage || play?.passage)) {
+      sceneName = play.currentPassage || play.passage;
+    }
+
     if (!sceneName) {
-      throw new BadRequestException('划词评论必须包含场景名称 (sceneName)');
+      throw new BadRequestException(
+        '划词评论必须包含场景名称或需先进入场景游玩',
+      );
     }
 
     const rawStart = position.start ?? position.startOffset ?? 0;
@@ -91,13 +115,89 @@ export class CommentService {
     const start = Math.min(rawStart, rawEnd);
     const end = Math.max(rawStart, rawEnd);
 
+    let variableSnapshot =
+      position.variableSnapshot ?? position.variables ?? null;
+
+    // 若前端或调用方未显式传入非空快照，则由后端从 story 与 play 自动提取该场景所依赖的变量快照
+    if (!variableSnapshot || Object.keys(variableSnapshot).length === 0) {
+      variableSnapshot = await this.generateSceneVariableSnapshot(
+        storyId,
+        sceneName,
+        play?.variables || {},
+      );
+    }
+
     return {
       sceneName,
       start,
       end,
-      variableSnapshot: position.variableSnapshot ?? position.variables ?? {},
+      variableSnapshot,
       selectedText: position.selectedText,
     };
+  }
+
+  /**
+   * 基于场景与故事文本，提取所引用的所有变量并生成快照
+   */
+  async generateSceneVariableSnapshot(
+    storyId: string,
+    sceneName: string,
+    currentVariables: Record<string, any> = {},
+  ): Promise<Record<string, any>> {
+    try {
+      let storyContent: string | null = null;
+      const approvedList = await this.storiesService.getApprovedByIds([
+        storyId,
+      ]);
+      if (approvedList && approvedList.length > 0 && approvedList[0].content) {
+        storyContent = approvedList[0].content;
+      } else {
+        const storyList = await this.storiesService.getStorysByIds([storyId]);
+        if (storyList && storyList.length > 0 && storyList[0].content) {
+          storyContent = storyList[0].content;
+        } else {
+          const direct =
+            (await this.storiesService.findById?.(storyId, true)) ||
+            (await this.storiesService.findById?.(storyId, false));
+          storyContent = direct?.content || null;
+        }
+      }
+
+      if (!storyContent) {
+        return {};
+      }
+
+      const parsed = parseStorySource(storyContent);
+      if (!parsed?.passages) {
+        return {};
+      }
+
+      const targetPassage = parsed.passages.find((p) => p.name === sceneName);
+      if (!targetPassage || !targetPassage.content) {
+        return {};
+      }
+
+      const referencedVars = extractSceneReferencedVariables(
+        targetPassage.content,
+        parsed.passages,
+        new Set([sceneName]),
+      );
+
+      const snapshot: Record<string, any> = {};
+      for (const varName of referencedVars) {
+        snapshot[varName] =
+          currentVariables[varName] !== undefined
+            ? currentVariables[varName]
+            : 0;
+      }
+      return snapshot;
+    } catch (err) {
+      console.warn(
+        '[CommentService] generateSceneVariableSnapshot failed:',
+        err,
+      );
+      return {};
+    }
   }
 
   /**
@@ -152,11 +252,21 @@ export class CommentService {
         displayContent = '[该评论已被管理员屏蔽]';
       }
 
+      let parsedPosition = c.position;
+      if (typeof parsedPosition === 'string') {
+        try {
+          parsedPosition = JSON.parse(parsedPosition);
+        } catch {
+          parsedPosition = null;
+        }
+      }
+
       return {
         ...c,
         author,
         replyToUser,
         content: displayContent,
+        position: parsedPosition,
         blockReason: isAdmin ? c.blockReason : undefined,
       };
     });
@@ -201,7 +311,11 @@ export class CommentService {
       }
     }
 
-    const normalizedPosition = this.normalizePosition(dto.position);
+    const normalizedPosition = await this.resolveAndNormalizePosition(
+      dto.storyId,
+      userId,
+      dto.position,
+    );
 
     const comment = this.commentRepo.create({
       storyId: dto.storyId,
@@ -228,6 +342,7 @@ export class CommentService {
     const {
       storyId,
       sceneName,
+      currentSceneName,
       parentId,
       hasPosition,
       tree,
@@ -264,12 +379,78 @@ export class CommentService {
         ? sceneName
         : undefined;
 
+    const validCurrentSceneName =
+      currentSceneName &&
+      currentSceneName !== 'undefined' &&
+      currentSceneName !== 'null'
+        ? currentSceneName
+        : undefined;
+
     if (validSceneName) {
       qb.andWhere(
         "JSON_UNQUOTE(JSON_EXTRACT(comment.position, '$.sceneName')) = :sceneName",
         { sceneName: validSceneName },
       );
+    } else if (validCurrentSceneName) {
+      // 评论列表中的划词评论，过滤掉不属于当前场景的评论（常规故事评论 comment.position IS NULL 予以保留）
+      qb.andWhere(
+        "(comment.position IS NULL OR JSON_UNQUOTE(JSON_EXTRACT(comment.position, '$.sceneName')) = :currentSceneName)",
+        { currentSceneName: validCurrentSceneName },
+      );
     }
+
+    let readerVariables: Record<string, any> | null = null;
+    if (query.variables) {
+      try {
+        readerVariables =
+          typeof query.variables === 'string'
+            ? JSON.parse(query.variables)
+            : query.variables;
+      } catch {
+        // ignore json parse error
+      }
+    }
+
+    const targetScene = validSceneName || validCurrentSceneName;
+
+    const matchesVariables = (c: Comment | CommentWithDetails): boolean => {
+      // 常规故事评论（无划词位置）直接保留
+      if (!c.position) return true;
+
+      let pos = c.position;
+      if (typeof pos === 'string') {
+        try {
+          pos = JSON.parse(pos);
+        } catch {
+          return false;
+        }
+      }
+
+      // 划词评论：必须属于当前场景（若指定了 targetScene）
+      if (targetScene && pos.sceneName !== targetScene) {
+        return false;
+      }
+
+      // 划词评论：必须匹配变量快照
+      const snapshot = pos.variableSnapshot || (pos as any).variables;
+      if (!snapshot || Object.keys(snapshot).length === 0) {
+        return true;
+      }
+      if (!readerVariables) {
+        return false;
+      }
+      for (const [key, expectedVal] of Object.entries(snapshot)) {
+        const actualVal =
+          readerVariables[key] !== undefined ? readerVariables[key] : 0;
+        const normExpected = expectedVal !== undefined ? expectedVal : 0;
+        if (JSON.stringify(actualVal) !== JSON.stringify(normExpected)) {
+          return false;
+        }
+      }
+      return true;
+    };
+
+    const shouldFilter = readerVariables !== null || targetScene !== undefined;
 
     if (tree) {
       // 树形模式：仅分页查询根评论（parentId 为 NULL），然后聚合各自的回复
@@ -279,8 +460,11 @@ export class CommentService {
 
       const [rootComments, total] = await qb.getManyAndCount();
       const detailedRoots = await this.attachUserDetails(rootComments, isAdmin);
+      const filteredRoots = shouldFilter
+        ? detailedRoots.filter(matchesVariables)
+        : detailedRoots;
 
-      const rootIds = detailedRoots.map((r) => r.id);
+      const rootIds = filteredRoots.map((r) => r.id);
       let repliesByParent: Record<string, CommentWithDetails[]> = {};
 
       if (rootIds.length > 0) {
@@ -301,7 +485,7 @@ export class CommentService {
         );
       }
 
-      const data = detailedRoots.map((root) => {
+      const data = filteredRoots.map((root) => {
         const replies = repliesByParent[root.id] || [];
         return {
           ...root,
@@ -310,7 +494,12 @@ export class CommentService {
         };
       });
 
-      return { data, total, page, limit };
+      return {
+        data,
+        total: shouldFilter ? filteredRoots.length : total,
+        page,
+        limit,
+      };
     }
 
     // 扁平模式
@@ -327,8 +516,14 @@ export class CommentService {
 
     const [comments, total] = await qb.getManyAndCount();
     const data = await this.attachUserDetails(comments, isAdmin);
+    const filteredData = shouldFilter ? data.filter(matchesVariables) : data;
 
-    return { data, total, page, limit };
+    return {
+      data: filteredData,
+      total: shouldFilter ? filteredData.length : total,
+      page,
+      limit,
+    };
   }
 
   /**

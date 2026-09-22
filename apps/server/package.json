@@ -87,6 +87,7 @@
     "coverageDirectory": "../coverage",
     "testEnvironment": "node",
     "moduleNameMapper": {
+      "^tellory$": "<rootDir>/../../../packages/sdk/src/index.ts",
       "^src/(.*)$": "<rootDir>/$1"
     }
   }

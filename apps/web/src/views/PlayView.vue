@@ -59,7 +59,11 @@
       >
         <!-- 正文渲染区 -->
         <div class="page-turn-stage">
-          <transition name="page-turn" mode="out-in">
+          <transition
+            name="page-turn"
+            mode="out-in"
+            @after-enter="onSceneAfterEnter"
+          >
             <div
               :key="sceneRenderKey"
               ref="contentRef"
@@ -78,7 +82,7 @@
             <span
               class="inline-block w-1.5 h-1.5 rounded-full bg-success/80 animate-pulse"
             ></span>
-            当前章节: {{ play?.passage || play?.currentPassage || "序幕" }}
+            当前章节: {{ play?.currentPassage || play?.passage || "序幕" }}
           </span>
           <div class="flex items-center gap-2 flex-wrap">
             <div class="text-xs text-base-content/50">正在阅读</div>
@@ -106,11 +110,387 @@
       <!-- 文章下方评论区 -->
       <CommentSection
         v-if="storyId"
+        ref="commentSectionRef"
         class="mt-8"
         :story-id="storyId"
-        :scene-name="play?.passage || play?.currentPassage"
+        :scene-name="currentPassageName"
+        :variables="variables"
       />
     </main>
+
+    <!-- 划词操作悬浮按钮 -->
+    <div
+      v-if="floatingBtnVisible"
+      class="fixed z-50 -translate-x-1/2 -translate-y-full pointer-events-auto transition-all duration-150"
+      :style="{ top: `${floatingBtnPos.top}px`, left: `${floatingBtnPos.left}px` }"
+    >
+      <button
+        type="button"
+        class="btn btn-primary btn-xs sm:btn-sm rounded-full shadow-xl gap-1.5 px-3 py-1 font-sans font-medium hover:scale-105 transition-transform"
+        @mousedown.prevent="openSelectionCommentModal"
+      >
+        <Icon icon="mdi:comment-quote-outline" class="size-3.5 sm:size-4" />
+        <span>划线评论</span>
+      </button>
+    </div>
+
+    <!-- 划线评论发布弹窗 -->
+    <div
+      v-if="showInlineModal"
+      class="modal modal-open backdrop-blur-sm bg-neutral/40"
+    >
+      <div class="modal-box max-w-lg p-5 sm:p-6 space-y-4 rounded-2xl font-sans bg-base-100">
+        <div class="flex items-center justify-between pb-2 border-b border-base-200">
+          <div class="flex items-center gap-2">
+            <div class="size-7 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
+              <Icon icon="mdi:comment-quote" class="size-4" />
+            </div>
+            <h3 class="font-bold text-base text-base-content">
+              划线评论
+            </h3>
+          </div>
+          <button
+            type="button"
+            class="btn btn-sm btn-ghost btn-circle"
+            @click="closeSelectionCommentModal"
+          >
+            ✕
+          </button>
+        </div>
+
+        <!-- 选中文本展示 -->
+        <div
+          v-if="currentSelection?.text"
+          class="border-l-3 border-primary bg-base-200/50 p-3 rounded-r-xl text-xs sm:text-sm font-serif leading-relaxed text-base-content/85 italic max-h-32 overflow-y-auto"
+        >
+          “{{ currentSelection.text }}”
+        </div>
+
+        <!-- 评论输入框 -->
+        <div class="space-y-2">
+          <textarea
+            v-model="inlineCommentContent"
+            rows="3"
+            class="textarea textarea-bordered w-full text-xs sm:text-sm font-sans"
+            placeholder="写下你对此处的想法、推测或体验感受..."
+            :disabled="inlineSubmitting"
+          ></textarea>
+
+          <label class="label cursor-pointer justify-start gap-2 py-0">
+            <input
+              v-model="inlineIsSpoiler"
+              type="checkbox"
+              class="checkbox checkbox-sm checkbox-warning"
+              :disabled="inlineSubmitting"
+            />
+            <span class="label-text text-xs text-base-content/70">标记为剧透评论（折叠展示）</span>
+          </label>
+        </div>
+
+        <!-- 弹窗底部操作按钮 -->
+        <div class="modal-action flex items-center justify-end gap-2 pt-2">
+          <button
+            type="button"
+            class="btn btn-sm btn-ghost"
+            :disabled="inlineSubmitting"
+            @click="closeSelectionCommentModal"
+          >
+            取消
+          </button>
+          <button
+            type="button"
+            class="btn btn-sm btn-primary gap-1"
+            :disabled="!inlineCommentContent.trim() || inlineSubmitting"
+            @click="submitSelectionComment"
+          >
+            <span v-if="inlineSubmitting" class="loading loading-spinner loading-xs"></span>
+            <Icon v-else icon="mdi:send" class="size-3.5" />
+            <span>发表评论</span>
+          </button>
+        </div>
+      </div>
+      <div class="modal-backdrop" @click="closeSelectionCommentModal"></div>
+    </div>
+
+    <!-- 划线评论预览弹窗 (点击正文划线高亮触发) -->
+    <div
+      v-if="showQuoteCommentsModal"
+      class="modal modal-open backdrop-blur-sm bg-neutral/40"
+    >
+      <div class="modal-box max-w-lg p-5 space-y-4 rounded-2xl font-sans bg-base-100">
+        <div class="flex items-center justify-between pb-2 border-b border-base-200">
+          <div class="flex items-center gap-2">
+            <div class="size-7 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
+              <Icon icon="mdi:format-quote-open" class="size-4" />
+            </div>
+            <h3 class="font-bold text-base text-base-content">
+              关于此处的划线评论 ({{ activeQuoteTotalCount }})
+            </h3>
+          </div>
+          <button
+            type="button"
+            class="btn btn-sm btn-ghost btn-circle"
+            @click="showQuoteCommentsModal = false"
+          >
+            ✕
+          </button>
+        </div>
+
+        <!-- 引用文本 -->
+        <div class="border-l-3 border-primary bg-base-200/50 p-3 rounded-r-xl text-xs sm:text-sm font-serif leading-relaxed text-base-content/85 italic max-h-32 overflow-y-auto">
+          “{{ activeQuoteText }}”
+        </div>
+
+        <!-- 评论列表 -->
+        <div class="space-y-3 max-h-80 overflow-y-auto pr-1">
+          <div
+            v-for="c in activeQuoteComments"
+            :key="c.id"
+            class="p-3 bg-base-200/40 rounded-xl border border-base-200/80 space-y-2 text-xs"
+          >
+            <div class="flex items-center justify-between gap-2">
+              <div class="flex items-center gap-2">
+                <Avatar
+                  :user="c.author"
+                  size="24"
+                  link
+                  class="shrink-0"
+                />
+                <span class="font-medium text-base-content">
+                  {{ c.author?.nickname || c.author?.username || "读者" }}
+                </span>
+                <span v-if="c.isSpoiler" class="badge badge-warning badge-xs">剧透</span>
+              </div>
+              <div class="flex items-center gap-1.5">
+                <span class="text-base-content/40 font-mono text-[10px]">
+                  {{ formatTime(c.createdAt) }}
+                </span>
+                <button
+                  v-if="canDeleteQuoteComment(c)"
+                  type="button"
+                  class="btn btn-ghost btn-xs text-error/60 hover:text-error btn-square size-5"
+                  title="删除此评论"
+                  @click="deleteQuoteComment(c)"
+                >
+                  <Icon icon="mdi:delete-outline" class="size-3.5" />
+                </button>
+              </div>
+            </div>
+
+            <!-- 内容与剧透折叠 -->
+            <div class="text-base-content/90 leading-relaxed break-words whitespace-pre-wrap">
+              <template v-if="c.isSpoiler && !revealedQuoteSpoilers.has(c.id)">
+                <button
+                  type="button"
+                  class="text-warning text-xs hover:underline flex items-center gap-1"
+                  @click="revealedQuoteSpoilers.add(c.id)"
+                >
+                  <Icon icon="mdi:eye-off-outline" class="size-3.5" />
+                  <span>剧透内容，点击查看</span>
+                </button>
+              </template>
+              <template v-else>
+                {{ c.content }}
+              </template>
+            </div>
+
+            <!-- 根评论操作栏 -->
+            <div class="flex items-center gap-3 pt-1 text-[11px] text-base-content/50">
+              <button
+                type="button"
+                class="hover:text-primary transition-colors flex items-center gap-1"
+                @click="startQuoteReply(c, c)"
+              >
+                <Icon icon="mdi:reply-outline" class="size-3" />
+                <span>回复</span>
+              </button>
+            </div>
+
+            <!-- 针对根评论的回复输入框 -->
+            <div
+              v-if="activeQuoteReply?.rootId === c.id && activeQuoteReply?.targetComment.id === c.id"
+              class="mt-2 bg-base-100 p-2.5 rounded-lg border border-base-300 space-y-2"
+            >
+              <textarea
+                v-model="quoteReplyContent"
+                rows="2"
+                class="textarea textarea-bordered textarea-xs w-full rounded text-xs bg-base-100"
+                :placeholder="`回复 @${c.author?.nickname || c.author?.username || '读者'}...`"
+                :disabled="quoteReplySubmitting"
+              ></textarea>
+              <div class="flex items-center justify-between">
+                <label class="label cursor-pointer gap-1 py-0">
+                  <input
+                    v-model="quoteReplyIsSpoiler"
+                    type="checkbox"
+                    class="checkbox checkbox-warning checkbox-xs rounded"
+                  />
+                  <span class="label-text text-[11px] text-base-content/70">包含剧透</span>
+                </label>
+                <div class="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    class="btn btn-ghost btn-xs"
+                    :disabled="quoteReplySubmitting"
+                    @click="cancelQuoteReply"
+                  >
+                    取消
+                  </button>
+                  <button
+                    type="button"
+                    class="btn btn-primary btn-xs"
+                    :disabled="quoteReplySubmitting || !quoteReplyContent.trim()"
+                    @click="submitQuoteReply"
+                  >
+                    <span v-if="quoteReplySubmitting" class="loading loading-spinner loading-xs"></span>
+                    <span>回复</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- 子回复楼层 (二级列表) -->
+            <div
+              v-if="c.replies && c.replies.length > 0"
+              class="mt-2.5 space-y-2.5 pl-3 border-l-2 border-base-300/80"
+            >
+              <div
+                v-for="reply in c.replies"
+                :key="reply.id"
+                class="sub-reply space-y-1 text-xs"
+              >
+                <div class="flex items-center justify-between gap-2">
+                  <div class="flex items-center gap-1.5 flex-wrap">
+                    <Avatar
+                      :user="reply.author"
+                      size="20"
+                      link
+                      class="shrink-0"
+                    />
+                    <span class="font-medium text-base-content/90">
+                      {{ reply.author?.nickname || reply.author?.username || "未知读者" }}
+                    </span>
+                    <template v-if="reply.replyToUser">
+                      <span class="text-base-content/40 text-[11px]">回复</span>
+                      <span class="text-primary font-medium text-[11px]">
+                        @{{ reply.replyToUser.nickname || reply.replyToUser.username }}
+                      </span>
+                    </template>
+                    <span v-if="reply.isSpoiler" class="badge badge-warning badge-xs">剧透</span>
+                  </div>
+                  <div class="flex items-center gap-1">
+                    <span class="text-base-content/40 font-mono text-[10px]">
+                      {{ formatTime(reply.createdAt) }}
+                    </span>
+                    <button
+                      v-if="canDeleteQuoteComment(reply)"
+                      type="button"
+                      class="btn btn-ghost btn-xs text-error/60 hover:text-error btn-square size-4.5"
+                      title="删除此回复"
+                      @click="deleteQuoteComment(reply)"
+                    >
+                      <Icon icon="mdi:delete-outline" class="size-3" />
+                    </button>
+                  </div>
+                </div>
+
+                <!-- 回复内容与剧透 -->
+                <div class="text-base-content/85 leading-relaxed break-words whitespace-pre-wrap pl-6">
+                  <template v-if="reply.isSpoiler && !revealedQuoteSpoilers.has(reply.id)">
+                    <button
+                      type="button"
+                      class="text-warning text-xs hover:underline flex items-center gap-1"
+                      @click="revealedQuoteSpoilers.add(reply.id)"
+                    >
+                      <Icon icon="mdi:eye-off-outline" class="size-3.5" />
+                      <span>剧透内容，点击查看</span>
+                    </button>
+                  </template>
+                  <template v-else>
+                    {{ reply.content }}
+                  </template>
+                </div>
+
+                <!-- 回复按钮 -->
+                <div class="flex items-center gap-2 pl-6 text-[10px] text-base-content/50">
+                  <button
+                    type="button"
+                    class="hover:text-primary transition-colors flex items-center gap-0.5"
+                    @click="startQuoteReply(c, reply)"
+                  >
+                    <Icon icon="mdi:reply-outline" class="size-2.5" />
+                    <span>回复</span>
+                  </button>
+                </div>
+
+                <!-- 针对子回复的回复输入框 -->
+                <div
+                  v-if="activeQuoteReply?.rootId === c.id && activeQuoteReply?.targetComment.id === reply.id"
+                  class="mt-2 ml-6 bg-base-100 p-2.5 rounded-lg border border-base-300 space-y-2"
+                >
+                  <textarea
+                    v-model="quoteReplyContent"
+                    rows="2"
+                    class="textarea textarea-bordered textarea-xs w-full rounded text-xs bg-base-100"
+                    :placeholder="`回复 @${reply.author?.nickname || reply.author?.username || '读者'}...`"
+                    :disabled="quoteReplySubmitting"
+                  ></textarea>
+                  <div class="flex items-center justify-between">
+                    <label class="label cursor-pointer gap-1 py-0">
+                      <input
+                        v-model="quoteReplyIsSpoiler"
+                        type="checkbox"
+                        class="checkbox checkbox-warning checkbox-xs rounded"
+                      />
+                      <span class="label-text text-[11px] text-base-content/70">包含剧透</span>
+                    </label>
+                    <div class="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        class="btn btn-ghost btn-xs"
+                        :disabled="quoteReplySubmitting"
+                        @click="cancelQuoteReply"
+                      >
+                        取消
+                      </button>
+                      <button
+                        type="button"
+                        class="btn btn-primary btn-xs"
+                        :disabled="quoteReplySubmitting || !quoteReplyContent.trim()"
+                        @click="submitQuoteReply"
+                      >
+                        <span v-if="quoteReplySubmitting" class="loading loading-spinner loading-xs"></span>
+                        <span>回复</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 底部快捷操作 -->
+        <div class="modal-action flex items-center justify-between pt-2 border-t border-base-200">
+          <button
+            type="button"
+            class="btn btn-xs sm:btn-sm btn-ghost"
+            @click="showQuoteCommentsModal = false"
+          >
+            关闭
+          </button>
+          <button
+            type="button"
+            class="btn btn-xs sm:btn-sm btn-primary gap-1"
+            @click="openInlineFromQuote"
+          >
+            <Icon icon="mdi:plus" class="size-3.5" />
+            <span>我也写一条</span>
+          </button>
+        </div>
+      </div>
+      <div class="modal-backdrop" @click="showQuoteCommentsModal = false"></div>
+    </div>
 
     <VariableInspector
       :is-test="isTest"
@@ -331,7 +711,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch, computed } from "vue";
+import { ref, onMounted, onUnmounted, watch, computed, nextTick } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { getStory } from "@/api/stories";
 import {
@@ -352,10 +732,24 @@ import VariableInspector from "@/components/debug/VariableInspector.vue";
 import JsonView from "@/components/debug/JsonView.vue";
 import Icon from "@/components/Icon/src/Icon.vue";
 import CommentSection from "@/components/comment/CommentSection.vue";
+import {
+  getSelectionOffsets,
+  renderCommentMarks,
+  clearCommentMarks,
+} from "@/lib/commentSelection";
+import {
+  getComments,
+  createComment,
+  deleteComment,
+  matchVariableSnapshot,
+  type CommentItem,
+} from "@/api/comments";
 
 const route = useRoute();
 const router = useRouter();
 const appStore = useAppStore();
+const authStore = useAuthStore();
+const userInfo = computed(() => authStore.getUser);
 const storyId = ref<string>(route.params.storyId.toString() || "");
 
 const story = ref<any>(null);
@@ -370,6 +764,60 @@ const unlockedEnding = ref<IEndingUnlock | null>(null);
 const isEnding = ref(false);
 const sceneRenderKey = ref(0);
 const undoing = ref(false);
+
+const commentSectionRef = ref<any>(null);
+
+// 划线操作与选区
+const floatingBtnVisible = ref(false);
+const floatingBtnPos = ref({ top: 0, left: 0 });
+const currentSelection = ref<{
+  text: string;
+  start: number;
+  end: number;
+} | null>(null);
+
+// 划线发布弹窗
+const showInlineModal = ref(false);
+const inlineCommentContent = ref("");
+const inlineIsSpoiler = ref(false);
+const inlineSubmitting = ref(false);
+
+// 点击高亮引文查看评论弹窗
+const showQuoteCommentsModal = ref(false);
+const activeQuoteComments = ref<CommentItem[]>([]);
+const activeQuoteText = ref("");
+const revealedQuoteSpoilers = ref<Set<string>>(new Set());
+
+// 划线评论回复状态
+const activeQuoteReply = ref<{
+  rootId: string;
+  targetComment: CommentItem;
+} | null>(null);
+const quoteReplyContent = ref("");
+const quoteReplyIsSpoiler = ref(false);
+const quoteReplySubmitting = ref(false);
+
+const activeQuoteTotalCount = computed(() => {
+  return activeQuoteComments.value.reduce((sum, c) => {
+    const repCount = Array.isArray(c.replies)
+      ? c.replies.length
+      : (c.replyCount || 0);
+    return sum + 1 + repCount;
+  }, 0);
+});
+
+// 场景名称
+const currentPassageName = computed(() => {
+  return (
+    play.value?.currentPassage ||
+    play.value?.passage ||
+    story.value?.startPassage ||
+    "Start"
+  );
+});
+
+// 当前场景匹配的划词评论
+const sceneMatchingComments = ref<CommentItem[]>([]);
 
 // Inspector state (测试模式)
 const inspectorDrawerOpen = ref(false);
@@ -432,6 +880,9 @@ watch(
 
 onUnmounted(() => {
   appStore.setCustomHeaderTitle(null);
+  window.removeEventListener("mouseup", handleMouseUp);
+  window.removeEventListener("touchend", handleMouseUp);
+  document.removeEventListener("selectionchange", handleSelectionChange);
 });
 
 function dismissEndingUnlock() {
@@ -491,8 +942,11 @@ async function startPlay() {
     play.value = res as any;
     currentHtml.value = res.html || "";
     isEnding.value = false;
-    variables.value = {};
+    variables.value = (res as any).variables || {};
     showModal.value = false;
+    nextTick(() => {
+      refreshSceneCommentsAndMarks();
+    });
   } catch (err) {
     console.error("startPlay error", err);
   }
@@ -504,7 +958,10 @@ async function confirmRestart() {
   play.value = res as any;
   currentHtml.value = res.html || "";
   isEnding.value = false;
-  variables.value = {};
+  variables.value = (res as any).variables || {};
+  nextTick(() => {
+    refreshSceneCommentsAndMarks();
+  });
 }
 
 async function undo() {
@@ -515,11 +972,11 @@ async function undo() {
       back: true,
     })) as IUpdatePlayResponse;
     play.value = res as any;
+    variables.value = res.variables || {};
     if (res.html) {
       applySceneHtml(res.html, true);
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
-    variables.value = res.variables || {};
     isEnding.value = !!res.isEnding;
     showEndUnlockFx.value = false;
     unlockedEnding.value = null;
@@ -536,6 +993,14 @@ function applySceneHtml(nextHtml: string, withPageTurn: boolean) {
   if (withPageTurn) {
     sceneRenderKey.value += 1;
   }
+  nextTick(() => {
+    refreshSceneCommentsAndMarks();
+    commentSectionRef.value?.loadComments(true);
+  });
+}
+
+function onSceneAfterEnter() {
+  refreshSceneCommentsAndMarks();
 }
 
 function closeModal() {
@@ -545,6 +1010,10 @@ function closeModal() {
 
 const contentRef = ref<HTMLElement>();
 onMounted(async () => {
+  window.addEventListener("mouseup", handleMouseUp);
+  window.addEventListener("touchend", handleMouseUp);
+  document.addEventListener("selectionchange", handleSelectionChange);
+
   await loadStory();
   await loadReaders();
   const started = await loadExistingPlay();
@@ -552,6 +1021,310 @@ onMounted(async () => {
     showModal.value = false;
   } else {
     showModal.value = true;
+  }
+  nextTick(() => {
+    refreshSceneCommentsAndMarks();
+  });
+});
+
+// 选区检测与悬浮按钮定位
+function checkSelection() {
+  if (showInlineModal.value || showQuoteCommentsModal.value) {
+    floatingBtnVisible.value = false;
+    return;
+  }
+
+  const selection = window.getSelection();
+  if (!selection || selection.isCollapsed || selection.rangeCount === 0) {
+    floatingBtnVisible.value = false;
+    return;
+  }
+
+  const range = selection.getRangeAt(0);
+  const text = selection.toString().trim();
+  if (!text || text.length < 1) {
+    floatingBtnVisible.value = false;
+    return;
+  }
+
+  if (
+    !contentRef.value ||
+    !contentRef.value.contains(range.commonAncestorContainer)
+  ) {
+    floatingBtnVisible.value = false;
+    return;
+  }
+
+  const commonAncestor = range.commonAncestorContainer;
+  const element =
+    commonAncestor.nodeType === Node.ELEMENT_NODE
+      ? (commonAncestor as Element)
+      : commonAncestor.parentElement;
+  if (element && element.closest(".tellory-mark-badge")) {
+    floatingBtnVisible.value = false;
+    return;
+  }
+
+  const rect = range.getBoundingClientRect();
+  if (!rect || (rect.width === 0 && rect.height === 0)) {
+    floatingBtnVisible.value = false;
+    return;
+  }
+
+  const { start, end } = getSelectionOffsets(contentRef.value, range);
+  currentSelection.value = {
+    text,
+    start,
+    end,
+  };
+
+  floatingBtnPos.value = {
+    top: Math.max(12, rect.top - 8),
+    left: Math.max(
+      60,
+      Math.min(window.innerWidth - 60, rect.left + rect.width / 2),
+    ),
+  };
+  floatingBtnVisible.value = true;
+}
+
+let selectionTimeout: any = null;
+function handleSelectionChange() {
+  if (selectionTimeout) clearTimeout(selectionTimeout);
+  selectionTimeout = setTimeout(() => {
+    checkSelection();
+  }, 100);
+}
+
+function handleMouseUp() {
+  setTimeout(() => {
+    checkSelection();
+  }, 20);
+}
+
+function openSelectionCommentModal() {
+  if (!currentSelection.value) return;
+  floatingBtnVisible.value = false;
+  inlineCommentContent.value = "";
+  inlineIsSpoiler.value = false;
+  showInlineModal.value = true;
+  // 清除浏览器选区，避免后续 selectionchange / mouseup 循环触发
+  window.getSelection()?.removeAllRanges();
+}
+
+function closeSelectionCommentModal() {
+  showInlineModal.value = false;
+  inlineCommentContent.value = "";
+  inlineIsSpoiler.value = false;
+}
+
+async function submitSelectionComment() {
+  if (
+    !inlineCommentContent.value.trim() ||
+    !storyId.value ||
+    !currentSelection.value
+  )
+    return;
+  inlineSubmitting.value = true;
+  try {
+    const payload = {
+      storyId: storyId.value,
+      content: inlineCommentContent.value.trim(),
+      isSpoiler: inlineIsSpoiler.value,
+      position: {
+        sceneName: currentPassageName.value,
+        start: currentSelection.value.start,
+        end: currentSelection.value.end,
+        selectedText: currentSelection.value.text,
+      },
+    };
+    await createComment(payload);
+    Message.success("划线评论发表成功");
+    closeSelectionCommentModal();
+    floatingBtnVisible.value = false;
+    await refreshSceneCommentsAndMarks();
+  } catch (err: any) {
+    Message.error(err?.message || "发表划线评论失败");
+  } finally {
+    inlineSubmitting.value = false;
+  }
+}
+
+async function refreshSceneCommentsAndMarks() {
+  if (!storyId.value) return;
+  await nextTick();
+  if (!contentRef.value) return;
+
+  try {
+    const scene = currentPassageName.value;
+    const currentVars = variables.value;
+    const res = await getComments({
+      storyId: storyId.value,
+      sceneName: scene,
+      hasPosition: true,
+      variables: currentVars,
+      tree: true,
+      limit: 100,
+    });
+    const list = res.data || [];
+    const matching = list.filter((c) =>
+      matchVariableSnapshot(c.position?.variableSnapshot, currentVars),
+    );
+    sceneMatchingComments.value = matching;
+
+    const currentEl = contentRef.value;
+    if (currentEl) {
+      renderCommentMarks(currentEl, matching, (group, markEl) => {
+        activeQuoteComments.value = group;
+        activeQuoteText.value =
+          group[0]?.position?.selectedText ||
+          markEl.getAttribute("data-quote") ||
+          "";
+        revealedQuoteSpoilers.value = new Set();
+        cancelQuoteReply();
+        showQuoteCommentsModal.value = true;
+      });
+    }
+  } catch (err) {
+    console.warn("[PlayView] refreshSceneCommentsAndMarks failed", err);
+  }
+}
+
+function scrollToCommentSection() {
+  showQuoteCommentsModal.value = false;
+  const el =
+    commentSectionRef.value?.$el || document.querySelector(".comment-section");
+  if (el) {
+    el.scrollIntoView({ behavior: "smooth" });
+  }
+}
+
+function openInlineFromQuote() {
+  showQuoteCommentsModal.value = false;
+  currentSelection.value = {
+    text: activeQuoteText.value,
+    start: 0,
+    end: activeQuoteText.value.length,
+  };
+  openSelectionCommentModal();
+}
+
+function startQuoteReply(root: CommentItem, target: CommentItem) {
+  if (!authStore.isAuthenticated) {
+    Message.warning("请先登录后再进行回复");
+    return;
+  }
+  activeQuoteReply.value = { rootId: root.id, targetComment: target };
+  quoteReplyContent.value = "";
+  quoteReplyIsSpoiler.value = false;
+}
+
+function cancelQuoteReply() {
+  activeQuoteReply.value = null;
+  quoteReplyContent.value = "";
+  quoteReplyIsSpoiler.value = false;
+}
+
+async function submitQuoteReply() {
+  if (!activeQuoteReply.value || !storyId.value) return;
+  const text = quoteReplyContent.value.trim();
+  if (!text) {
+    Message.warning("回复内容不能为空");
+    return;
+  }
+
+  quoteReplySubmitting.value = true;
+  try {
+    await createComment({
+      storyId: storyId.value,
+      content: text,
+      parentId: activeQuoteReply.value.rootId,
+      replyToId: activeQuoteReply.value.targetComment.id,
+      replyToUserId: activeQuoteReply.value.targetComment.userId,
+      isSpoiler: quoteReplyIsSpoiler.value,
+    });
+    Message.success("回复发送成功");
+    cancelQuoteReply();
+    await refreshSceneCommentsAndMarks();
+    const targetQuote = activeQuoteText.value;
+    if (targetQuote) {
+      const matchingGroup = sceneMatchingComments.value.filter(
+        (c) => c.position?.selectedText?.trim() === targetQuote.trim(),
+      );
+      activeQuoteComments.value = matchingGroup;
+    }
+  } catch (err: any) {
+    Message.error(err?.message || "回复发送失败");
+  } finally {
+    quoteReplySubmitting.value = false;
+  }
+}
+
+function canDeleteQuoteComment(c: CommentItem): boolean {
+  if (c.isDeleted) return false;
+  const curUser = userInfo.value;
+  return c.userId === curUser?.id || Boolean(curUser?.isAdmin);
+}
+
+async function deleteQuoteComment(c: CommentItem) {
+  if (!confirm("确定要删除这条评论吗？")) return;
+  try {
+    await deleteComment(c.id);
+    Message.success("评论已删除");
+    await refreshSceneCommentsAndMarks();
+    const targetQuote = activeQuoteText.value;
+    if (targetQuote) {
+      const matchingGroup = sceneMatchingComments.value.filter(
+        (item) => item.position?.selectedText?.trim() === targetQuote.trim(),
+      );
+      activeQuoteComments.value = matchingGroup;
+      if (matchingGroup.length === 0) {
+        showQuoteCommentsModal.value = false;
+      }
+    }
+  } catch (err: any) {
+    Message.error(err?.message || "删除评论失败");
+  }
+}
+
+function formatTime(timestamp: number) {
+  if (!timestamp) return "";
+  const diff = Date.now() - Number(timestamp);
+  if (diff < 60 * 1000) return "刚刚";
+  if (diff < 60 * 60 * 1000) return `${Math.floor(diff / (60 * 1000))} 分钟前`;
+  if (diff < 24 * 60 * 60 * 1000)
+    return `${Math.floor(diff / (60 * 60 * 1000))} 小时前`;
+  if (diff < 30 * 24 * 60 * 60 * 1000)
+    return `${Math.floor(diff / (24 * 60 * 60 * 1000))} 天前`;
+  return new Date(Number(timestamp)).toLocaleDateString("zh-CN", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+}
+
+watch(
+  () => variables.value,
+  () => {
+    refreshSceneCommentsAndMarks();
+  },
+  { deep: true },
+);
+
+watch(
+  () => currentPassageName.value,
+  () => {
+    nextTick(() => {
+      refreshSceneCommentsAndMarks();
+    });
+  },
+);
+
+watch(contentRef, (el) => {
+  if (el) {
+    nextTick(() => {
+      refreshSceneCommentsAndMarks();
+    });
   }
 });
 
@@ -576,9 +1349,9 @@ async function onContentClick(e: MouseEvent) {
       display,
     })) as IUpdatePlayResponse;
     play.value = res as any;
+    variables.value = res.variables || {};
     if (res.html) {
       applySceneHtml(res.html, !res.end);
-      variables.value = res.variables || {};
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
     if (res.end) {
@@ -592,8 +1365,11 @@ async function onContentClick(e: MouseEvent) {
   }
 }
 
-const { getUser: userInfo } = useAuthStore();
-const isTest = computed(() => route.name == 'test' && (userInfo.isAdmin || story.value.authorId == userInfo.id))
+const isTest = computed(
+  () =>
+    route.name == "test" &&
+    (userInfo.value?.isAdmin || story.value?.authorId == userInfo.value?.id),
+);
 </script>
 
 <style scoped>
@@ -837,5 +1613,51 @@ const isTest = computed(() => route.name == 'test' && (userInfo.isAdmin || story
 .slide-fade-leave-to {
   transform: translateX(12px);
   opacity: 0;
+}
+
+/* 划词评论高亮样式：常态下仅显示数字小气泡，鼠标悬停展示虚线下划线 */
+:deep(.tellory-comment-mark) {
+  background-color: transparent;
+  text-decoration: none;
+  border-radius: 2px;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+  color: inherit;
+}
+
+:deep(.tellory-comment-mark:hover) {
+  text-decoration: underline dashed var(--color-primary, #646cff);
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1.5px;
+  background-color: color-mix(in oklch, var(--color-primary, #646cff) 8%, transparent);
+}
+
+:deep(.tellory-mark-badge) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  vertical-align: 0.35em;
+  margin-left: 3px;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 3.5px;
+  font-size: 9.5px;
+  line-height: 1;
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-weight: 600;
+  border-radius: 9999px;
+  background-color: var(--color-primary, #646cff);
+  color: var(--color-primary-content, #ffffff);
+  pointer-events: none;
+  user-select: none;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+  transition: transform 0.15s ease, filter 0.15s ease;
+  text-decoration: none !important;
+  border-bottom: none !important;
+}
+
+:deep(.tellory-comment-mark:hover .tellory-mark-badge) {
+  transform: scale(1.08);
+  filter: brightness(1.08);
 }
 </style>

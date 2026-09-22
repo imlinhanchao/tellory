@@ -9,16 +9,9 @@
         <h3 class="font-bold text-lg text-base-content tracking-tight">故事评论</h3>
         <span class="badge badge-neutral badge-sm font-mono">{{ total }}</span>
       </div>
-      <div class="flex items-center gap-2 text-xs text-base-content/60">
-        <button
-          class="btn btn-ghost btn-xs gap-1"
-          :class="{ 'text-primary font-bold': filterScene }"
-          :title="filterScene ? '查看全部评论' : '只看当前章节评论'"
-          @click="toggleSceneFilter"
-        >
-          <Icon icon="mdi:filter-variant" class="size-3.5" />
-          <span>{{ filterScene ? "当前章节" : "全部评论" }}</span>
-        </button>
+      <div class="flex items-center gap-1.5 text-xs text-base-content/50 font-medium">
+        <Icon icon="mdi:message-text-outline" class="size-3.5" />
+        <span>全篇讨论</span>
       </div>
     </div>
 
@@ -69,18 +62,18 @@
     </div>
 
     <!-- 评论列表区域 -->
-    <div v-if="loading && comments.length === 0" class="flex justify-center py-12">
+    <div v-if="loading && visibleComments.length === 0" class="flex justify-center py-12">
       <span class="loading loading-dots loading-md text-primary"></span>
     </div>
 
-    <div v-else-if="comments.length === 0" class="text-center py-12 text-base-content/40">
+    <div v-else-if="visibleComments.length === 0" class="text-center py-12 text-base-content/40">
       <Icon icon="mdi:comment-outline" class="size-12 mx-auto mb-2 opacity-40" />
       <p class="text-sm">暂无评论，快来留下第一条想法吧~</p>
     </div>
 
     <div v-else class="space-y-6">
       <div
-        v-for="comment in comments"
+        v-for="comment in visibleComments"
         :key="comment.id"
         class="comment-thread group/thread border-b border-base-200/60 pb-6 last:border-none last:pb-0"
       >
@@ -109,25 +102,9 @@
                 剧透
               </span>
 
-              <!-- 场景划词标记 -->
-              <span
-                v-if="comment.position?.sceneName"
-                class="badge badge-outline badge-xs text-base-content/60 font-mono"
-              >
-                场景: {{ comment.position.sceneName }}
-              </span>
-
               <span class="text-base-content/40 ml-auto font-mono text-[11px]">
                 {{ formatTime(comment.createdAt) }}
               </span>
-            </div>
-
-            <!-- 划词引文（若有） -->
-            <div
-              v-if="comment.position?.selectedText"
-              class="mt-2 text-xs bg-base-200/60 border-l-2 border-primary/60 px-2.5 py-1.5 rounded-r text-base-content/70 italic"
-            >
-              “{{ comment.position.selectedText }}”
             </div>
 
             <!-- 评论内容（支持剧透折叠） -->
@@ -548,6 +525,7 @@ import {
 const props = defineProps<{
   storyId: string;
   sceneName?: string;
+  variables?: Record<string, any>;
 }>();
 
 const authStore = useAuthStore();
@@ -562,7 +540,6 @@ const page = ref(1);
 const limit = 20;
 const loading = ref(false);
 const submitting = ref(false);
-const filterScene = ref(false);
 
 // 主评论输入
 const commentContent = ref("");
@@ -627,7 +604,33 @@ function canDelete(c: CommentItem): boolean {
   return true;
 }
 
-// 获取评论列表
+function normalizeComment(c: CommentItem): CommentItem {
+  if (c.position && typeof c.position === "string") {
+    try {
+      c.position = JSON.parse(c.position);
+    } catch {
+      c.position = null;
+    }
+  }
+  if (c.replies && Array.isArray(c.replies)) {
+    c.replies.forEach(normalizeComment);
+  }
+  return c;
+}
+
+// 过滤可见评论：划线评论不再在列表中显示，只在正文内容中显示；故事评论列表仅展示常规全篇评论
+function isCommentVisibleToReader(c: CommentItem): boolean {
+  if (c.position) {
+    return false;
+  }
+  return true;
+}
+
+const visibleComments = computed(() => {
+  return comments.value.filter(isCommentVisibleToReader);
+});
+
+// 获取评论列表（只获取常规全篇故事评论）
 async function loadComments(reset = false) {
   if (!props.storyId) return;
   if (reset) {
@@ -637,15 +640,17 @@ async function loadComments(reset = false) {
   try {
     const res = await getComments({
       storyId: props.storyId,
-      sceneName: filterScene.value ? props.sceneName : undefined,
+      hasPosition: false,
       tree: true,
       page: page.value,
       limit,
     });
+    const rawData = res.data || [];
+    const data = rawData.map(normalizeComment);
     if (reset) {
-      comments.value = res.data || [];
+      comments.value = data;
     } else {
-      comments.value = [...comments.value, ...(res.data || [])];
+      comments.value = [...comments.value, ...data];
     }
     total.value = res.total || 0;
   } catch (err: any) {
@@ -658,11 +663,6 @@ async function loadComments(reset = false) {
 function loadMore() {
   page.value++;
   loadComments(false);
-}
-
-function toggleSceneFilter() {
-  filterScene.value = !filterScene.value;
-  loadComments(true);
 }
 
 // 切换剧透展示
@@ -831,6 +831,8 @@ async function handleUnblock(c: CommentItem) {
   }
 }
 
+
+
 // 监听 storyId 变化重载评论
 watch(
   () => props.storyId,
@@ -838,6 +840,10 @@ watch(
     if (newId) loadComments(true);
   },
 );
+
+defineExpose({
+  loadComments,
+});
 
 onMounted(() => {
   loadComments(true);

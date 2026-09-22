@@ -10,6 +10,7 @@ import { Comment } from './comment.entity';
 import { CommentReport } from './comment-report.entity';
 import { UsersService } from '../users/users.service';
 import { StoriesService } from '../stories/stories.service';
+import { PlayService } from '../play/play.service';
 
 describe('CommentService', () => {
   let service: CommentService;
@@ -17,6 +18,7 @@ describe('CommentService', () => {
   let mockReportRepo: any;
   let mockUsersService: any;
   let mockStoriesService: any;
+  let mockPlayService: any;
 
   beforeEach(async () => {
     mockCommentRepo = {
@@ -73,7 +75,12 @@ describe('CommentService', () => {
       getApprovedByIds: jest.fn((ids: string[]) => {
         if (ids.includes('valid-story-id')) {
           return Promise.resolve([
-            { id: 'approved-1', sourceStoryId: 'valid-story-id' },
+            {
+              id: 'approved-1',
+              sourceStoryId: 'valid-story-id',
+              content:
+                ':: scene_cabin\nHere is a chest.\n\n:: scene_auto\n你身上有 $gold 金币和 $hp 点生命值。\n[[继续|Next]]',
+            },
           ]);
         }
         return Promise.resolve([]);
@@ -83,6 +90,23 @@ describe('CommentService', () => {
           return Promise.resolve([{ id: ids[0], title: 'Test Story' }]);
         }
         return Promise.resolve([]);
+      }),
+      findById: jest.fn((id: string) =>
+        Promise.resolve({
+          id,
+          content:
+            ':: scene_auto\n你身上有 $gold 金币和 $hp 点生命值。\n[[继续|Next]]',
+        }),
+      ),
+    };
+
+    mockPlayService = {
+      findLatestByStoryId: jest.fn().mockResolvedValue({
+        id: 'play-uuid-1',
+        storyId: 'valid-story-id',
+        userId: 'user-1',
+        passage: 'scene_auto',
+        variables: { gold: 50, hp: 90, irrelevant: 'ignored' },
       }),
     };
 
@@ -104,6 +128,10 @@ describe('CommentService', () => {
         {
           provide: StoriesService,
           useValue: mockStoriesService,
+        },
+        {
+          provide: PlayService,
+          useValue: mockPlayService,
         },
       ],
     }).compile();
@@ -206,6 +234,52 @@ describe('CommentService', () => {
           },
         }),
       );
+    });
+
+    it('should automatically generate scene variable snapshot and infer sceneName from play when omitted', async () => {
+      mockStoriesService.getApprovedByIds.mockResolvedValueOnce([
+        {
+          id: 'valid-story-id',
+          sourceStoryId: 'valid-story-id',
+          content: `:: scene_auto
+你身上有 $gold 金币和 $hp 点生命值。
+[[继续|Next]]`,
+        },
+      ]);
+
+      const result = await service.create('user-1', {
+        storyId: 'valid-story-id',
+        content: 'Auto snapshot extraction test',
+        position: {
+          start: 5,
+          end: 20,
+          selectedText: '金币和生命值',
+        },
+      });
+
+      expect(mockPlayService.findLatestByStoryId).toHaveBeenCalledWith(
+        'valid-story-id',
+        'user-1',
+      );
+      expect(mockCommentRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          position: {
+            sceneName: 'scene_auto',
+            start: 5,
+            end: 20,
+            selectedText: '金币和生命值',
+            variableSnapshot: {
+              gold: 50,
+              hp: 90,
+            },
+          },
+        }),
+      );
+      expect(result.position?.sceneName).toBe('scene_auto');
+      expect(result.position?.variableSnapshot).toEqual({
+        gold: 50,
+        hp: 90,
+      });
     });
 
     it('should create a reply to a root comment', async () => {
@@ -441,9 +515,221 @@ describe('CommentService', () => {
 
       expect(res.total).toBe(1);
       expect(res.data[0].id).toBe('root-1');
-      expect(res.data[0].replies.length).toBe(1);
-      expect(res.data[0].replies[0].id).toBe('reply-1');
+      expect(res.data[0].replies!.length).toBe(1);
+      expect(res.data[0].replies![0].id).toBe('reply-1');
       expect(res.data[0].replyCount).toBe(1);
+    });
+
+    it('should filter selection comments by variable snapshot matching', async () => {
+      const mockQb: any = {
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        skip: jest.fn().mockReturnThis(),
+        take: jest.fn().mockReturnThis(),
+        getManyAndCount: jest.fn().mockResolvedValueOnce([
+          [
+            // Comment 1: no position (story level) -> always matches
+            {
+              id: 'c1',
+              storyId: 'valid-story-id',
+              userId: 'user-1',
+              content: 'Story level comment',
+              position: null,
+            },
+            // Comment 2: matches reader variables { hasTorch: true }
+            {
+              id: 'c2',
+              storyId: 'valid-story-id',
+              userId: 'user-1',
+              content: 'Matching comment',
+              position: {
+                sceneName: 'cave',
+                variableSnapshot: { hasTorch: true },
+              },
+            },
+            // Comment 3: does NOT match reader variables (requires { hasTorch: false })
+            {
+              id: 'c3',
+              storyId: 'valid-story-id',
+              userId: 'user-1',
+              content: 'Unmatching comment',
+              position: {
+                sceneName: 'cave',
+                variableSnapshot: { hasTorch: false },
+              },
+            },
+          ],
+          3,
+        ]),
+      };
+      mockCommentRepo.createQueryBuilder.mockReturnValue(mockQb);
+
+      // Reader has { hasTorch: true }
+      const res = await service.findAll({
+        storyId: 'valid-story-id',
+        variables: JSON.stringify({ hasTorch: true }),
+      });
+
+      expect(res.data.length).toBe(2);
+      expect(res.data.map((c) => c.id)).toEqual(['c1', 'c2']);
+    });
+
+    it('should filter selection comments by currentSceneName and variable snapshot in comment list', async () => {
+      const mockQb: any = {
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        skip: jest.fn().mockReturnThis(),
+        take: jest.fn().mockReturnThis(),
+        getManyAndCount: jest.fn().mockResolvedValueOnce([
+          [
+            // Comment 1: Story level comment -> retained
+            {
+              id: 'story-comm-1',
+              storyId: 'valid-story-id',
+              userId: 'user-1',
+              content: 'Story level comment',
+              position: null,
+            },
+            // Comment 2: Matches currentSceneName 'cave' and variables { hp: 100 } -> retained
+            {
+              id: 'match-scene-vars',
+              storyId: 'valid-story-id',
+              userId: 'user-1',
+              content: 'Matching cave comment',
+              position: {
+                sceneName: 'cave',
+                variableSnapshot: { hp: 100 },
+              },
+            },
+            // Comment 3: Belongs to different scene 'forest' -> filtered out
+            {
+              id: 'other-scene-comm',
+              storyId: 'valid-story-id',
+              userId: 'user-1',
+              content: 'Forest scene comment',
+              position: {
+                sceneName: 'forest',
+                variableSnapshot: { hp: 100 },
+              },
+            },
+            // Comment 4: Belongs to 'cave', but requires { hp: 50 } -> filtered out
+            {
+              id: 'mismatched-vars-comm',
+              storyId: 'valid-story-id',
+              userId: 'user-1',
+              content: 'Low hp cave comment',
+              position: {
+                sceneName: 'cave',
+                variableSnapshot: { hp: 50 },
+              },
+            },
+          ],
+          4,
+        ]),
+      };
+      mockCommentRepo.createQueryBuilder.mockReturnValue(mockQb);
+
+      const res = await service.findAll({
+        storyId: 'valid-story-id',
+        currentSceneName: 'cave',
+        variables: JSON.stringify({ hp: 100 }),
+      });
+
+      expect(mockQb.andWhere).toHaveBeenCalledWith(
+        "(comment.position IS NULL OR JSON_UNQUOTE(JSON_EXTRACT(comment.position, '$.sceneName')) = :currentSceneName)",
+        { currentSceneName: 'cave' },
+      );
+      expect(res.data.length).toBe(2);
+      expect(res.data.map((c) => c.id)).toEqual([
+        'story-comm-1',
+        'match-scene-vars',
+      ]);
+    });
+
+    it('should query comments without position when hasPosition is false', async () => {
+      const mockQb: any = {
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        skip: jest.fn().mockReturnThis(),
+        take: jest.fn().mockReturnThis(),
+        getManyAndCount: jest.fn().mockResolvedValueOnce([
+          [
+            {
+              id: 'story-comm-only',
+              storyId: 'valid-story-id',
+              userId: 'user-1',
+              content: 'Only story level comment',
+              position: null,
+            },
+          ],
+          1,
+        ]),
+      };
+      mockCommentRepo.createQueryBuilder.mockReturnValue(mockQb);
+
+      const res = await service.findAll({
+        storyId: 'valid-story-id',
+        hasPosition: false,
+      });
+
+      expect(mockQb.andWhere).toHaveBeenCalledWith('comment.position IS NULL');
+      expect(res.data.length).toBe(1);
+      expect(res.data[0].id).toBe('story-comm-only');
+    });
+
+    it('should still filter other scene selection comments even when isAdmin is true', async () => {
+      const mockQb: any = {
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        skip: jest.fn().mockReturnThis(),
+        take: jest.fn().mockReturnThis(),
+        getManyAndCount: jest.fn().mockResolvedValueOnce([
+          [
+            {
+              id: 'c-story',
+              storyId: 'valid-story-id',
+              userId: 'user-1',
+              content: 'Story comment',
+              position: null,
+            },
+            {
+              id: 'c-cave',
+              storyId: 'valid-story-id',
+              userId: 'user-1',
+              content: 'Cave comment',
+              position: { sceneName: 'cave', variableSnapshot: {} },
+            },
+            {
+              id: 'c-forest',
+              storyId: 'valid-story-id',
+              userId: 'user-1',
+              content: 'Forest comment',
+              position: { sceneName: 'forest', variableSnapshot: {} },
+            },
+          ],
+          3,
+        ]),
+      };
+      mockCommentRepo.createQueryBuilder.mockReturnValue(mockQb);
+
+      const res = await service.findAll(
+        {
+          storyId: 'valid-story-id',
+          currentSceneName: 'cave',
+        },
+        true, // isAdmin = true
+      );
+
+      expect(mockQb.andWhere).toHaveBeenCalledWith(
+        "(comment.position IS NULL OR JSON_UNQUOTE(JSON_EXTRACT(comment.position, '$.sceneName')) = :currentSceneName)",
+        { currentSceneName: 'cave' },
+      );
+      expect(res.data.length).toBe(2);
+      expect(res.data.map((c) => c.id)).toEqual(['c-story', 'c-cave']);
     });
   });
 
@@ -647,7 +933,11 @@ describe('CommentService', () => {
       };
       mockReportRepo.createQueryBuilder.mockReturnValue(mockQb);
       mockUsersService.getUsers.mockResolvedValueOnce([
-        { id: 'user-reporter', username: 'reporter', nickname: 'Reporter Nick' },
+        {
+          id: 'user-reporter',
+          username: 'reporter',
+          nickname: 'Reporter Nick',
+        },
       ]);
       mockCommentRepo.find.mockResolvedValueOnce([
         {
@@ -664,7 +954,11 @@ describe('CommentService', () => {
         { id: 'user-author', username: 'author', nickname: 'Author Nick' },
       ]);
 
-      const res = await service.findReports({ status: 'pending', page: 1, limit: 10 });
+      const res = await service.findReports({
+        status: 'pending',
+        page: 1,
+        limit: 10,
+      });
 
       expect(res.total).toBe(1);
       expect(res.data[0].id).toBe('rep-1');
