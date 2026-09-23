@@ -110,7 +110,7 @@
           </span>
           <div class="flex items-center gap-2 flex-wrap">
             <div class="text-xs text-base-content/50">正在阅读</div>
-            <div class="avatar-group -space-x-6">
+            <div class="avatar-group -space-x-3">
               <Avatar
                 v-for="reader in readers.slice(0, 5)"
                 :key="reader.id"
