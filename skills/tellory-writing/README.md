@@ -19,15 +19,14 @@ npx skills add imlinhanchao/tellory
 
 ## 如何使用
 
-1. **创作**：使用本 Skill 提供的 `Prompt.md` 作为 AI 创作的提示词，填入你的故事设定。
-2. **自查与验证**：
-   - 运行 `python3 scripts/audit.py <故事文件>` 检查结构。
-   - 运行 `node scripts/smoke.cjs <故事文件>` 进行渲染测试。
-3. **发布**：将生成的 Tellory 故事源码导入 [story.adventext.fun](https://story.adventext.fun) 进行预览与发布。
+- 安装本 Skill：参见上方的安装说明。
+- 在你的 AI 工具中输入 /tellory-writing <你的故事设定>。
+- 完成后复制生成的 Tellory 源码。
+- 打开 [故事编辑器](https://story.adventext.fun/#/story-editor) 点击工具栏的 📋 粘贴生成的 Tellory 源码。
 
 ## AI 创作 Prompt
 
-你也可以直接复制 [Prompt.md](Prompt.md) 的提示词直接创作你的故事。不过提示词受限于模型的理解与生成能力，可能需要根据实际输出进行调整。推荐使用 SKILL 进行创作。
+你也可以直接复制 [Prompt.md](Prompt.md) 的提示词直接在 AI 对话中创作你的故事。这种方式支持网页的 AI 聊天，不过缺少语法检查与校验，可能需要根据实际输出进行调整。推荐使用 SKILL 进行创作。
 
 ## 参考
 
