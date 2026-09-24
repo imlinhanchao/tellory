@@ -4,57 +4,15 @@
       <aside
         v-if="!isMobile"
         data-tour="passage-list"
-        class="hidden lg:block rounded-2xl border border-base-300 bg-base-100 p-3 shadow-sm min-w-70"
+        class="hidden lg:flex flex-col rounded-2xl border border-base-300 bg-base-100 p-3 shadow-sm min-w-70 w-72 shrink-0 self-start sticky top-4 max-h-[calc(100vh-2rem)]"
       >
-        <div class="mb-3 flex items-center justify-between px-1">
-          <h2 class="text-lg font-bold">段落列表</h2>
-          <button
-            v-if="!props.readOnly"
-            class="btn btn-sm btn-primary"
-            type="button"
-            @click="addPassage"
-          >
-            新增
-          </button>
-        </div>
-
-        <div class="mb-2">
-          <input
-            v-model="searchFilter"
-            placeholder="通过名称或 tag 搜索..."
-            class="input input-sm w-full"
-          />
-        </div>
-
-        <div class="space-y-2 max-h-[calc(100vh-200px)] overflow-y-auto">
-          <div
-            v-for="passage in filteredPassages"
-            :key="passage.name"
-            class="flex items-center justify-between gap-2"
-          >
-            <button
-              type="button"
-              class="flex-1 flex items-center justify-between rounded-xl border px-3 py-2 text-left transition truncate"
-              :class="
-                selectedPassage === passage.name
-                  ? 'border-primary bg-primary/10'
-                  : 'border-base-300 bg-base-200 hover:border-primary/70'
-              "
-              @click="selectPassage(passage.name)"
-            >
-              <span class="truncate font-medium">{{ passage.name }}</span>
-              <span class="space-x-2">
-                <Icon
-                  icon="mdi:content-copy"
-                  data-tip="复制段落名"
-                  class="tooltip tooltip-left cursor-pointer"
-                  size="12px"
-                  @click.stop="copyPassageName(passage.name)"
-                />
-              </span>
-            </button>
-          </div>
-        </div>
+        <PassageList
+          v-model:passages="story.passages"
+          v-model:selectedPassage="selectedPassage"
+          :start-passage="story.startPassage"
+          :read-only="props.readOnly"
+          @add="addPassage"
+        />
       </aside>
 
       <!-- 移动端段落抽屉 -->
@@ -63,49 +21,19 @@
           ref="passageRef"
           class="modal modal-bottom sm:modal-middle w-screen"
         >
-          <div class="modal-box h-[80vh] flex flex-col relative">
-            <header class="flex justify-between items-center pb-3">
-              <h3 class="font-bold text-lg">
-                段落列表 ({{ filteredPassages.length }})
-              </h3>
-              <button
-                v-if="!props.readOnly"
-                class="btn btn-sm btn-primary"
-                type="button"
-                @click="addPassage"
-              >
-                新增
-              </button>
-            </header>
-            <div class="mb-4">
-              <input
-                v-model="searchFilter"
-                placeholder="搜索段落..."
-                class="input input-bordered w-full"
-              />
-            </div>
-            <div class="space-y-2 flex-1 overflow-y-auto">
-              <button
-                v-for="passage in filteredPassages"
-                :key="passage.name"
-                class="w-full text-left p-3 rounded-lg border"
-                :class="
-                  selectedPassage === passage.name
-                    ? 'bg-primary/10 border-primary'
-                    : 'bg-base-200'
-                "
-                @click="
-                  selectPassage(passage.name);
-                  passageRef?.close();
-                "
-              >
-                {{ passage.name }}
-              </button>
-            </div>
-            <div class="modal-action bottom-5 right-5 absolute">
+          <div class="modal-box h-[80vh] flex flex-col relative p-4">
+            <PassageList
+              v-model:passages="story.passages"
+              v-model:selectedPassage="selectedPassage"
+              :start-passage="story.startPassage"
+              :read-only="props.readOnly"
+              @add="addPassage"
+              @select="passageRef?.close()"
+            />
+            <div class="modal-action bottom-4 right-4 absolute">
               <form method="dialog">
-                <button class="btn btn-circle btn-error btn-soft">
-                  <Icon icon="mdi:close" class="text-lg" />
+                <button class="btn btn-circle btn-error btn-soft btn-sm" title="关闭">
+                  <Icon icon="mdi:close" class="text-base" />
                 </button>
               </form>
             </div>
@@ -643,6 +571,7 @@ import { completeTour } from "@/api/user";
 import StoryPlayView from "@/views/StoryPlayView.vue";
 import StoryEditorPanel from "@/components/StoryEditor/StoryEditorPanel.vue";
 import StoryRightPanel from "@/components/StoryEditor/StoryRightPanel.vue";
+import PassageList from "@/components/StoryEditor/PassageList.vue";
 import StoryGraph from "@/components/StoryGraph/src/StoryGraph.vue";
 import {
   createDefaultStory,
@@ -1714,29 +1643,7 @@ const deletePassage = () => {
   selectedPassage.value = story.value.passages[0].name;
 };
 
-const copyPassageName = async (name: string) => {
-  if (!name) return;
-  try {
-    await navigator.clipboard.writeText(name);
-  } catch {
-    // fallback for environments without clipboard API
-    // eslint-disable-next-line no-alert
-    window.prompt("请复制段落名：", name);
-  }
-};
-
-const searchFilter = ref("");
 const tagEditValue = ref("");
-
-const filteredPassages = computed(() => {
-  const q = (searchFilter.value || "").trim().toLowerCase();
-  if (!q) return story.value.passages;
-  return story.value.passages.filter((p) => {
-    if (p.name.toLowerCase().includes(q)) return true;
-    for (const t of p.tags || []) if (t.toLowerCase().includes(q)) return true;
-    return false;
-  });
-});
 
 const saveTags = () => {
   const p = story.value.passages.find((x) => x.name === selectedPassage.value);
