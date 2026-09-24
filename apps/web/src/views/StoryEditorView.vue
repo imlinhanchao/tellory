@@ -171,16 +171,21 @@
               <template v-if="!props.readOnly">
                 <div
                   class="tooltip tooltip-bottom"
-                  data-tip="保存至服务器"
+                  :data-tip="hasUnsavedChanges() ? '保存（有未保存修改）' : '保存至服务器'"
                   data-tour="btn-save"
                 >
                   <button
-                    class="btn btn-sm btn-primary btn-ghost btn-circle"
+                    class="btn btn-sm btn-primary btn-ghost btn-circle relative"
                     type="button"
                     :disabled="syntaxChecking || saveInProgress"
                     @click="saveToServer"
                   >
                     <Icon icon="mdi:content-save-outline" size="16px" />
+                    <span
+                      v-if="hasUnsavedChanges()"
+                      class="absolute top-1 right-1 w-2 h-2 rounded-full bg-warning ring-2 ring-base-100"
+                      title="有未保存修改"
+                    ></span>
                   </button>
                 </div>
                 <div
@@ -559,7 +564,7 @@ import {
   onBeforeUnmount,
   watch,
 } from "vue";
-import { useRouter, useRoute } from "vue-router";
+import { useRouter, useRoute, onBeforeRouteLeave } from "vue-router";
 import {
   getStory,
   createStory,
@@ -601,7 +606,11 @@ import { useAppStore } from "@/stores/modules/app";
 import { useAuthStore } from "@/stores/modules/auth";
 import { omit } from "lodash-es";
 import msgbox from "@/components/msgbox";
-import useStoryDraft from "@/composables/useStoryDraft";
+import useStoryDraft, {
+  normalizeStoryTags,
+  cloneStoryForDraft,
+  storyFingerprint,
+} from "@/composables/useStoryDraft";
 import Icon from "@/components/Icon/src/Icon.vue";
 import Tour from "@/components/Tour/src/Tour.vue";
 import type { TourStep } from "@/components/Tour/src/types";
@@ -636,20 +645,8 @@ const showManual = ref(false);
 const appendMode = ref(true);
 const showAppendToggle = ref(false);
 
-const LOCAL_DRAFT_PREFIX = "haide-story-draft:";
-const LOCAL_DRAFT_NO_ID_KEY = `${LOCAL_DRAFT_PREFIX}no-id`;
-const LOCAL_DRAFT_LEGACY_KEY = "haide-story-draft";
 const LOCAL_DRAFT_INTERVAL_MS = 30000;
-
-interface LocalStoryDraft {
-  storyId: string | null;
-  savedAt?: number;
-  story: StoryData & Pick<Partial<IStory>, "shortname" | "status">;
-}
-
-let localDraftTimer: ReturnType<typeof window.setInterval> | null = null;
 let initVersion = 0;
-let lastDraftFingerprint = "";
 
 // 保存前的语法检查对话框状态
 const syntaxDialogRef = ref<HTMLDialogElement | null>(null);
@@ -755,7 +752,15 @@ const activeRightTab = ref<"preview" | "vars" | "points" | "endings">(
   "preview",
 );
 
-const { startAutoSave, stopAutoSave, saveDraftNow, clearDraftAfterSave: clearDraftAfterSaveHook, tryRestoreDraft } = useStoryDraft();
+const {
+  startAutoSave,
+  stopAutoSave,
+  saveLocalDraftNow,
+  clearLocalDraft,
+  tryRestoreNoIdDraft,
+  updateSnapshot,
+  hasUnsavedChanges,
+} = useStoryDraft();
 
 const selectedPassageContent = computed({
   get: () => {
@@ -904,10 +909,6 @@ onBeforeUnmount(() => {
       window.removeEventListener('keydown', globalKeydownHandler);
     } catch {}
     globalKeydownHandler = null;
-  }
-  if (localDraftTimer) {
-    window.clearInterval(localDraftTimer);
-    localDraftTimer = null;
   }
   try {
     stopAutoSave();
@@ -1120,125 +1121,6 @@ function normalizePassageTags(passages: any[]) {
   }
   return passages;
 }
-
-const normalizeStoryTags = (tags: unknown): string[] => {
-  if (Array.isArray(tags)) {
-    return tags.map((t) => String(t).trim()).filter(Boolean);
-  }
-  if (typeof tags === "string") {
-    return tags
-      .replaceAll("，", ",")
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean);
-  }
-  return [];
-};
-
-const cloneStoryForDraft = (
-  input: Partial<IStory> | StoryData,
-): StoryData & Pick<Partial<IStory>, "shortname" | "status"> => {
-  const passages = Array.isArray((input as any)?.passages)
-    ? (input as any).passages.map((p: any) => ({
-        name: String(p?.name || "Untitled"),
-        tags: Array.isArray(p?.tags)
-          ? p.tags.map((t: unknown) => String(t).trim()).filter(Boolean)
-          : [],
-        content: String(p?.content || ""),
-      }))
-    : [];
-
-  return {
-    title: String((input as any)?.title || "未命名故事"),
-    startPassage: String((input as any)?.startPassage || passages[0]?.name || "Start"),
-    description: String((input as any)?.description || ""),
-    shortname:
-      typeof (input as any)?.shortname === "string"
-        ? (input as any).shortname.trim() || undefined
-        : (input as any)?.shortname,
-    status: (input as any)?.status,
-    tags: normalizeStoryTags((input as any)?.tags),
-    passages: normalizePassageTags(passages),
-  };
-};
-
-const storyFingerprint = (input: Partial<IStory> | StoryData | null | undefined) => {
-  if (!input) return "";
-  const normalized = cloneStoryForDraft(input as any);
-  return JSON.stringify(normalized);
-};
-
-const draftStorageKey = (storyId: string | null | undefined) => {
-  const id = (storyId || "").trim();
-  if (!id) return LOCAL_DRAFT_NO_ID_KEY;
-  return `${LOCAL_DRAFT_PREFIX}${id}`;
-};
-
-const parseLocalDraft = (raw: string | null): LocalStoryDraft | null => {
-  if (!raw) return null;
-  try {
-    const parsed = JSON.parse(raw);
-    if (parsed && typeof parsed === "object" && parsed.story) {
-      const draftStory = cloneStoryForDraft(parsed.story as StoryData);
-      return {
-        storyId:
-          typeof (parsed as any).storyId === "string"
-            ? (parsed as any).storyId
-            : null,
-        savedAt:
-          typeof (parsed as any).savedAt === "number"
-            ? (parsed as any).savedAt
-            : undefined,
-        story: draftStory,
-      };
-    }
-
-    if (parsed && typeof parsed === "object" && Array.isArray((parsed as any).passages)) {
-      return {
-        storyId: null,
-        savedAt: undefined,
-        story: cloneStoryForDraft(parsed as StoryData),
-      };
-    }
-  } catch {
-    return null;
-  }
-  return null;
-};
-
-const getDraftByKey = (key: string): LocalStoryDraft | null => {
-  try {
-    const raw = localStorage.getItem(key);
-    return parseLocalDraft(raw);
-  } catch {
-    return null;
-  }
-};
-
-const toTimestampMs = (value: unknown): number => {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return value < 1_000_000_000_000 ? value * 1000 : value;
-  }
-  if (typeof value === "string") {
-    const numeric = Number(value);
-    if (Number.isFinite(numeric)) return toTimestampMs(numeric);
-    const parsed = Date.parse(value);
-    return Number.isFinite(parsed) ? parsed : 0;
-  }
-  return 0;
-};
-
-const formatDraftTime = (savedAt?: number) => {
-  if (!savedAt || !Number.isFinite(savedAt)) return "未知时间";
-  try {
-    return new Date(savedAt).toLocaleString("zh-CN", {
-      hour12: false,
-    });
-  } catch {
-    return "未知时间";
-  }
-};
-
 const applyStoryToEditor = (input: Partial<IStory> | StoryData) => {
   const normalized = cloneStoryForDraft(input);
   const base = createEmptyStory();
@@ -1258,107 +1140,6 @@ const applyStoryToEditor = (input: Partial<IStory> | StoryData) => {
     story.value.startPassage || story.value.passages[0]?.name || "Start";
   previewPassage.value = selectedPassage.value;
   refreshPreview();
-  lastDraftFingerprint = storyFingerprint(story.value);
-};
-
-const saveDraft = () => {
-  const storyId = currentStoryId.value;
-  const key = draftStorageKey(storyId);
-  const payload: LocalStoryDraft = {
-    storyId: storyId || null,
-    savedAt: Date.now(),
-    story: cloneStoryForDraft(story.value),
-  };
-  localStorage.setItem(key, JSON.stringify(payload));
-  if (storyId) {
-    localStorage.removeItem(LOCAL_DRAFT_NO_ID_KEY);
-    localStorage.removeItem(LOCAL_DRAFT_LEGACY_KEY);
-  }
-  lastDraftFingerprint = storyFingerprint(story.value);
-};
-
-const clearDraftAfterSave = (savedStoryId: string | null | undefined) => {
-  localStorage.removeItem(draftStorageKey(savedStoryId));
-  localStorage.removeItem(LOCAL_DRAFT_NO_ID_KEY);
-  localStorage.removeItem(LOCAL_DRAFT_LEGACY_KEY);
-  lastDraftFingerprint = storyFingerprint(story.value);
-};
-
-const maybeRestoreNoIdDraft = async (): Promise<boolean> => {
-  const draft = getDraftByKey(LOCAL_DRAFT_NO_ID_KEY) || getDraftByKey(LOCAL_DRAFT_LEGACY_KEY);
-  if (!draft) return false;
-  const timeText = formatDraftTime(draft.savedAt);
-  const shouldLoad = await msgbox.confirm(
-    `${timeText} 有一份本地存档，是否载入？`,
-    "检测到本地存档",
-  );
-  if (!shouldLoad) return false;
-  applyStoryToEditor(draft.story);
-  return true;
-};
-
-const maybeRestoreIdDraft = async (
-  sid: string,
-  serverStory: IStory,
-): Promise<boolean> => {
-  const keys = new Set<string>();
-  keys.add(draftStorageKey(sid));
-  if (serverStory.id) {
-    keys.add(draftStorageKey(serverStory.id));
-  }
-
-  let newestDraft: LocalStoryDraft | null = null;
-  for (const key of keys) {
-    const draft = getDraftByKey(key);
-    if (!draft) continue;
-    if (!newestDraft || (draft.savedAt || 0) > (newestDraft.savedAt || 0)) {
-      newestDraft = draft;
-    }
-  }
-
-  if (!newestDraft) return false;
-
-  const draftFp = storyFingerprint(newestDraft.story);
-  const serverFp = storyFingerprint(serverStory);
-  const draftTime = newestDraft.savedAt || 0;
-  const storyUpdatedAt = toTimestampMs(serverStory.updatedAt);
-  const isNewer = draftTime > storyUpdatedAt;
-  const isDifferent = draftFp !== serverFp;
-
-  if (!isDifferent || !isNewer) {
-    return false;
-  }
-
-  const timeText = formatDraftTime(newestDraft.savedAt);
-  const shouldLoad = await msgbox.confirm(
-    `${timeText} 有一份本地存档，是否载入？`,
-    "检测到本地存档",
-  );
-  if (!shouldLoad) return false;
-
-  applyStoryToEditor({
-    ...newestDraft.story,
-    id: serverStory.id,
-  });
-  return true;
-};
-
-const startLocalDraftTimer = () => {
-  if (props.readOnly) return;
-  if (localDraftTimer) {
-    window.clearInterval(localDraftTimer);
-    localDraftTimer = null;
-  }
-  localDraftTimer = window.setInterval(() => {
-    try {
-      if (props.readOnly || saveInProgress.value) return;
-      const fp = storyFingerprint(story.value);
-      if (!fp || fp === lastDraftFingerprint) return;
-      saveDraft();
-    } catch {
-      // ignore local draft errors
-    }
-  }, LOCAL_DRAFT_INTERVAL_MS);
 };
 
 const copyStory = () => {
@@ -1486,13 +1267,13 @@ const copySyntaxResultsAsMarkdown = async () => {
 };
 
 /** 真正执行服务端保存，失败时回退到本地草稿。 */
-const performSave = async () => {
+const performSave = async (silent = false) => {
   if (saveInProgress.value) {
-    return;
+    return false;
   }
   if (shortnameInvalid.value) {
-    msg.error("短名只能包含字母、数字、下划线和连字符");
-    return;
+    if (!silent) msg.error("短名只能包含字母、数字、下划线和连字符");
+    return false;
   }
   saveInProgress.value = true;
   // Create payload compatible with server CreateStoryDto: title + content
@@ -1518,35 +1299,41 @@ const performSave = async () => {
     if (currentStoryId.value) {
       story.value.status = 'draft';
       await updateStory(currentStoryId.value, payload);
-      msg.success("已保存");
+      persistedShortname.value = story.value.shortname || null;
+      updateSnapshot();
+      clearLocalDraft();
+      if (!silent) {
+        msg.success("已保存");
+      } else {
+        msg.success("已自动保存");
+      }
+      return true;
     } else {
       const res = await createStory(payload);
       const newId = res?.id;
       if (newId) {
         currentStoryId.value = newId;
-        // navigate to editor with id
+        persistedShortname.value = story.value.shortname || null;
+        updateSnapshot();
+        clearLocalDraft();
         router.replace({ name: "story-editor", params: { storyId: newId } });
       }
       story.value.status = 'draft';
-      msg.success("已保存");
-    }
-    // 保存成功后短名才算落库，试玩链接此时才能安全使用它
-    persistedShortname.value = story.value.shortname || null;
-    try {
-      clearDraftAfterSaveHook(currentStoryId.value);
-    } catch {
-      clearDraftAfterSave(currentStoryId.value);
+      if (!silent) {
+        msg.success("已保存");
+      } else {
+        msg.success("已自动保存");
+      }
+      return true;
     }
   } catch (e) {
-    // fallback to local save
-    try {
-      saveDraftNow();
-    } catch {
-      saveDraft();
+    console.error("[StoryEditor] save failed", e);
+    if (!silent) {
+      const errMessage =
+        (e as any)?.response?.data?.message || (e as any)?.message;
+      msg.error(errMessage || "保存到服务器失败");
     }
-    const errMessage =
-      (e as any)?.response?.data?.message || (e as any)?.message;
-    msg.error(errMessage || "保存到服务器失败，已保存到本地草稿");
+    return false;
   } finally {
     saveInProgress.value = false;
   }
@@ -1670,22 +1457,41 @@ onMounted(() => {
     }
   };
   window.addEventListener('keydown', globalKeydownHandler);
-  startAutoSave(story, currentStoryId, { intervalMs: LOCAL_DRAFT_INTERVAL_MS, readOnly: props.readOnly, saveInProgressRef: saveInProgress });
-  // save draft synchronously on page unload/reload
+  startAutoSave(story, currentStoryId, {
+    intervalMs: LOCAL_DRAFT_INTERVAL_MS,
+    readOnly: props.readOnly,
+    saveInProgressRef: saveInProgress,
+    onSaveToServer: async () => {
+      // 有 id 的直接定时存档
+      await performSave(true);
+    },
+  });
+
+  // 关闭或刷新网页前检查是否有未保存的更新
   beforeUnloadHandler = (e: BeforeUnloadEvent) => {
-    try {
-      saveDraftNow();
-    } catch {}
-    // do not block unload; no returnValue set
+    if (hasUnsavedChanges()) {
+      e.preventDefault();
+      e.returnValue = "当前故事有更新未保存，确定要离开吗？";
+      return "当前故事有更新未保存，确定要离开吗？";
+    }
   };
   window.addEventListener("beforeunload", beforeUnloadHandler);
-  // also save when page becomes hidden (mobile/background tab)
+
+  // 页面切入后台时如有未保存更新则执行相应存档
   visibilityChangeHandler = () => {
     try {
-      if (document.visibilityState === "hidden") saveDraftNow();
+      if (props.readOnly) return;
+      if (document.visibilityState === "hidden" && hasUnsavedChanges()) {
+        if (!currentStoryId.value) {
+          saveLocalDraftNow();
+        } else {
+          void performSave(true);
+        }
+      }
     } catch {}
   };
   document.addEventListener("visibilitychange", visibilityChangeHandler);
+
   // if initialStory provided (read-only preview), use it directly
   if (props.initialStory) {
     try {
@@ -1693,11 +1499,13 @@ onMounted(() => {
       currentStoryId.value = data.id;
       persistedShortname.value = data.shortname ?? null;
       const parsed = parseStorySource(data.content);
-      applyStoryToEditor({
+      const s = {
         ...(data as any),
         tags: normalizeStoryTags((data as any).tags),
         passages: parsed.passages,
-      });
+      };
+      applyStoryToEditor(s);
+      updateSnapshot(s);
     } catch {
       // ignore
     }
@@ -1708,11 +1516,27 @@ onMounted(() => {
   maybeAutoStartTour();
 });
 
+// 跳转到其他路由页面时阻塞并提示未保存内容
+onBeforeRouteLeave(async () => {
+  if (hasUnsavedChanges()) {
+    const confirmed = await msgbox.confirm(
+      "当前故事有更新未保存，离开后未保存的修改可能会丢失，是否确定离开？",
+      "未保存的更改",
+      {
+        confirmText: "离开",
+        cancelText: "留下",
+      },
+    );
+    if (!confirmed) {
+      return false; // 阻塞路由跳转
+    }
+  }
+});
+
 async function init() {
   const version = ++initVersion;
   currentStoryId.value = null;
   persistedShortname.value = null;
-  applyStoryToEditor(createEmptyStory());
 
   // load story if id provided
   const sid = (route.params.storyId as string) || null;
@@ -1733,20 +1557,22 @@ async function init() {
       currentStoryId.value = serverStory.id || sid;
       persistedShortname.value = serverStory.shortname ?? null;
 
-      const restored = await tryRestoreDraft({ sid, serverStory, applyStory: applyStoryToEditor });
-      if (version !== initVersion) return;
-
-      if (!restored) {
-        applyStoryToEditor(serverStory);
-      }
+      applyStoryToEditor(serverStory);
+      updateSnapshot(serverStory);
       return;
     } catch {
       return;
     }
   }
 
-  await tryRestoreDraft({ sid: null, serverStory: null, applyStory: applyStoryToEditor });
+  // 无 ID 的故事，本地存档只针对无 id 的情况
+  const restored = await tryRestoreNoIdDraft({ applyStory: applyStoryToEditor });
   if (version !== initVersion) return;
+
+  if (!restored) {
+    applyStoryToEditor(createEmptyStory());
+    updateSnapshot(story.value);
+  }
 }
 
 watch(() => route.params.storyId, (newStoryId) => {
