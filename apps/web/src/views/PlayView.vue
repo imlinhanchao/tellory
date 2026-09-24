@@ -1113,14 +1113,26 @@ async function undo() {
   if (!canUndo.value || undoing.value) return;
   undoing.value = true;
   try {
+    const prevPassage =
+      play.value?.currentPassage ||
+      play.value?.passage ||
+      currentPassageName.value;
+
     const res = (await updatePlay(storyId.value, {
       back: true,
     })) as IUpdatePlayResponse;
+    const nextPassage = res.currentPassage || res.passage || prevPassage;
+    const isPassageChanged = Boolean(
+      prevPassage && nextPassage && prevPassage !== nextPassage,
+    );
+
     play.value = res as any;
     variables.value = res.variables || {};
     if (res.html) {
-      applySceneHtml(res.html, true);
-      window.scrollTo({ top: 0, behavior: "smooth" });
+      applySceneHtml(res.html, isPassageChanged);
+      if (isPassageChanged) {
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      }
     }
     isEnding.value = !!res.isEnding;
     showEndUnlockFx.value = false;
@@ -1597,16 +1609,28 @@ async function onContentClick(e: MouseEvent) {
       await startPlay();
     }
 
+    const prevPassage =
+      play.value?.currentPassage ||
+      play.value?.passage ||
+      currentPassageName.value;
+
     const res = (await updatePlay(storyId.value, {
       target,
       action,
       display,
     })) as IUpdatePlayResponse;
+    const nextPassage = res.currentPassage || res.passage || prevPassage;
+    const isPassageChanged = Boolean(
+      prevPassage && nextPassage && prevPassage !== nextPassage,
+    );
+
     play.value = res as any;
     variables.value = res.variables || {};
     if (res.html) {
-      applySceneHtml(res.html, !res.end);
-      window.scrollTo({ top: 0, behavior: "smooth" });
+      applySceneHtml(res.html, isPassageChanged && !res.end);
+      if (isPassageChanged) {
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      }
     }
     if (res.end) {
       triggerEndingUnlock(res.end);
