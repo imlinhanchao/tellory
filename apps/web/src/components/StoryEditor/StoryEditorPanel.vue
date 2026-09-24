@@ -106,7 +106,7 @@
         </button>
       </div>
 
-      <div class="inline md:tooltip tooltip-bottom" data-tip="上传图片并以 Markdown 插入" data-tour="tool-upload">
+      <div v-if="userInfo.uploadKey" class="inline md:tooltip tooltip-bottom" data-tip="上传图片并以 Markdown 插入" data-tour="tool-upload">
         <button class="btn btn-sm btn-ghost btn-square" type="button" @click="onUploadClick">
           <Icon icon="mdi:image" class="text-lg" />
         </button>
@@ -374,6 +374,11 @@ import 'codemirror/lib/codemirror.css';
 import 'codemirror/theme/dracula.css';
 import 'codemirror/mode/javascript/javascript';
 import 'codemirror/addon/mode/simple';
+import Compressor from 'compressorjs';
+import { uploadFiles } from '@/utils';
+import { useAuthStore } from '@/stores/modules/auth';
+import { Message } from '@/components/msg';
+
 // register the simple mode for our story syntax here so syntax highlighting
 // is available when this component initializes the editor.
 (CodeMirror as any).defineSimpleMode &&
@@ -407,6 +412,7 @@ const props = defineProps<{
 
 const selectedPassage = defineModel<string>('selectedPassage', { required: true });
 const content = defineModel<string>('content', { required: true });
+const { getUser: userInfo } = useAuthStore();
 
 const emits = defineEmits([
   'update:tagEditValue',
@@ -780,11 +786,6 @@ defineExpose({ insertSnippet, wrapSelection });
 // expose events list (already declared above)
 emits;
 
-// --- Upload image helpers ---
-import Compressor from 'compressorjs';
-import { uploadFiles } from '@/utils';
-import { useAuthStore } from '@/stores/modules/auth';
-import { Message } from '@/components/msg';
 
 const COMPRESS_THRESHOLD = 500 * 1024; // 500 KB
 const MAX_SIZE = 1 * 1024 * 1024;       // 1 MB
