@@ -67,6 +67,7 @@ export const storyFingerprint = (
 ) => {
   if (!input) return "";
   const normalized = cloneStoryForDraft(input as any);
+  delete normalized.status;
   return JSON.stringify(normalized);
 };
 
