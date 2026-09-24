@@ -77,6 +77,22 @@ export function escapeHtml(value: string): string {
 }
 
 /**
+ * Escapes only text-node-breaking HTML characters (`& < >`).
+ *
+ * Quotes are intentionally preserved for plain text nodes so user-authored
+ * content like `"文本"` renders as-is instead of `&quot;文本&quot;`.
+ *
+ * @param value - Raw text to escape.
+ * @returns HTML-escaped text-node content.
+ */
+export function escapeHtmlText(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+/**
  * Splits `text` into paragraphs on blank lines, trims each paragraph
  * (spaces/tabs only, preserving intentional newlines), escapes HTML
  * entities, and converts remaining single newlines to `<br>`.
@@ -90,7 +106,7 @@ export function formatTextNode(text: string): string {
   const parts: string[] = [];
   for (const p of paragraphs) {
     const trimmed = p.replace(/^[ \t]+|[ \t]+$/g, "");
-    const converted = escapeHtml(trimmed).replace(
+    const converted = escapeHtmlText(trimmed).replace(
       /(?<=[^>\n])\n(?!(\n|<)\S)/g,
       "<br>",
     );
@@ -206,7 +222,7 @@ export function sanitizeAllowedHtml(
         const openEnd = start + tagText.length;
         const inner = value.slice(openEnd, closeIdx);
         result += sanitizeTag(tagText, tagName);
-        result += escapeHtml(inner);
+        result += escapeHtmlText(inner);
         result += `</${tagName}>`;
         lastIndex = closeIdx + closeTag.length;
         continue;
