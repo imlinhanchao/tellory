@@ -13,6 +13,7 @@ export interface UserProfile {
   isToured?: boolean;
   points?: number;
   createdAt?: string;
+  uploadKey?: string;
 }
 
 /**

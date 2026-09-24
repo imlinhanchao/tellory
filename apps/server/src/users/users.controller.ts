@@ -23,7 +23,7 @@ export class UsersController {
   async getProfile(@Request() req) {
     const user = await this.usersService.findById(req.user.userId);
     if (!user) throw new Error('用户不存在');
-    const key = await getUploadKeyForUser(user.username, req);
+    const key = await getUploadKeyForUser(user.username);
 
     return { ...omit(user, User.unsafeKey), uploadKey: key ?? '' };
   }

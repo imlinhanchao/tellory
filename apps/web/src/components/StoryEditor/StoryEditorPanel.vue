@@ -1,5 +1,5 @@
 <template>
-  <div class="rounded-xl border border-base-300 bg-base-200/50">
+  <div class="rounded-xl border border-base-300 bg-base-200/50 relative">
     <div class="tools px-3 pt-3 z-100 sticky top-17.5 mb-4 flex flex-wrap items-center bg-base-200 rounded-xl border border-base-200" data-tour="editor-tools">
       <div class="inline md:inline-flex flex-wrap" data-tour="editor-syntax-tools">
         <div class="inline md:tooltip tooltip-bottom" data-tip="插入链接 [[显示|段落]]" data-tour="tool-link">
@@ -104,6 +104,38 @@
         <button class="btn btn-sm btn-ghost btn-square" type="button" @click="$emit('show-manual')">
           <Icon icon="mdi:book-open-variant" class="text-lg" />
         </button>
+      </div>
+
+      <div class="inline md:tooltip tooltip-bottom" data-tip="上传图片并以 Markdown 插入" data-tour="tool-upload">
+        <button class="btn btn-sm btn-ghost btn-square" type="button" @click="onUploadClick">
+          <Icon icon="mdi:image" class="text-lg" />
+        </button>
+      </div>
+    </div>
+
+    <input ref="fileInput" class="hidden" type="file" accept="image/*" multiple @change="onFileChange" />
+
+    <!-- Upload progress floating panel -->
+    <div
+      v-if="uploadState.uploading"
+      class="absolute md:top-28 top-45 z-1000 left-1/2 transform -translate-x-1/2 margin-auto w-50 rounded-xl border border-base-300 bg-base-100/95 px-3 py-2 shadow-xl backdrop-blur"
+    >
+      <div class="flex items-center gap-1.5"> 
+        <span v-if="uploadState.processing" class="loading loading-spinner loading-xs shrink-0 text-primary"></span>
+        <Icon v-else icon="mdi:image-outline" class="shrink-0 text-sm text-primary" />
+        <span class="min-w-0 flex-1 truncate text-xs text-base-content/70">{{ uploadState.filename }}</span>
+        <span v-if="!uploadState.processing" class="shrink-0 tabular-nums text-xs text-base-content/40">{{ uploadState.percent }}%</span>
+        <button class="-mr-1 btn btn-ghost btn-xs btn-square shrink-0" type="button" @click="cancelUpload">
+          <Icon icon="mdi:close" class="text-xs" />
+        </button>
+      </div>
+      <div class="mt-1.5 h-1 overflow-hidden rounded-full bg-base-300">
+        <div
+          v-if="!uploadState.processing"
+          class="h-full bg-primary transition-[width] duration-150"
+          :style="{ width: uploadState.percent + '%' }"
+        ></div>
+        <div v-else class="h-full w-full animate-pulse bg-primary"></div>
       </div>
     </div>
 
@@ -747,6 +779,105 @@ function wrapSelection(before: string, after?: string) {
 defineExpose({ insertSnippet, wrapSelection });
 // expose events list (already declared above)
 emits;
+
+// --- Upload image helpers ---
+import Compressor from 'compressorjs';
+import { uploadFiles } from '@/utils';
+import { useAuthStore } from '@/stores/modules/auth';
+import { Message } from '@/components/msg';
+
+const COMPRESS_THRESHOLD = 500 * 1024; // 500 KB
+const MAX_SIZE = 1 * 1024 * 1024;       // 1 MB
+
+function compressIfNeeded(file: File): Promise<File> {
+  if (file.size <= COMPRESS_THRESHOLD) return Promise.resolve(file);
+  return new Promise((resolve, reject) => {
+    new Compressor(file, {
+      quality: 0.8,
+      success(result) {
+        const out = result instanceof File ? result : new File([result], file.name, { type: result.type });
+        if (out.size > MAX_SIZE) {
+          reject(new Error(`图片「${file.name}」压缩后仍超过 1MB，请缩小后重试。`));
+        } else {
+          resolve(out);
+        }
+      },
+      error: reject,
+    });
+  });
+}
+
+const fileInput = ref<HTMLInputElement | null>(null);
+
+const uploadState = ref({
+  uploading: false,
+  processing: false,
+  percent: 0,
+  filename: '',
+  total: 0,
+  loaded: 0,
+  countText: '',
+});
+
+let currentXhr: XMLHttpRequest | null = null;
+
+function onUploadClick() {
+  if (props.readOnly) return;
+  fileInput.value?.click();
+}
+
+function cancelUpload() {
+  if (currentXhr) {
+    try {
+      currentXhr.abort();
+    } catch {}
+  }
+  uploadState.value.uploading = false;
+  uploadState.value.percent = 0;
+}
+
+async function onFileChange(e: Event) {
+  const input = e.target as HTMLInputElement;
+  const files = input.files;
+  if (!files || files.length === 0) return;
+  try {
+    const compressed = await Promise.all(Array.from(files).map(compressIfNeeded));
+    uploadState.value.filename = compressed.map((f) => f.name).join(', ');
+    uploadState.value.percent = 0;
+    uploadState.value.processing = false;
+    uploadState.value.uploading = true;
+
+    const data = await uploadFiles(compressed, undefined, {
+      onXhr: (xhr) => {
+        currentXhr = xhr;
+        uploadState.value.processing = false;
+        uploadState.value.percent = 0;
+      },
+      onProgress: (percent) => {
+        uploadState.value.percent = percent;
+      },
+      onProcessing: () => {
+        uploadState.value.percent = 100;
+        uploadState.value.processing = true;
+      },
+    });
+
+    if (!data || !data.files) throw new Error('上传返回数据格式异常');
+    for (const f of data.files) {
+      const alt = f.originalName || f.storedName || '';
+      const url = f.url || f.githubPath || '';
+      insertSnippet(`![${alt}](${url})`);
+    }
+    Message && Message.success && Message.success('图片上传并插入完成');
+  } catch (err: any) {
+    Message.error(err?.message || String(err));
+  } finally {
+    if (input) input.value = '';
+    uploadState.value.uploading = false;
+    uploadState.value.processing = false;
+    uploadState.value.percent = 0;
+  }
+}
 </script>
 
 <style scoped>

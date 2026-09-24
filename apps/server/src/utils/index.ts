@@ -40,12 +40,11 @@ export const getOrigin = getDomain;
  */
 export async function getUploadKeyForUser(
   username: string,
-  req: any,
 ): Promise<string | null> {
   const upload = ConfigService.get('upload');
   if (!upload) return null;
 
-  const from = getDomain(req) || 'haide';
+  const from = 'tellory';
   try {
     const base = String(upload).replace(/\/$/, '');
     const res = await fetch(`${base}/api/key`, {
@@ -53,12 +52,14 @@ export async function getUploadKeyForUser(
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, from }),
     });
-    const json = await res.json();
+    const body = await res.text();
+    const json = JSON.parse(body);
     if (json && json.code === 0 && json.data && json.data.key) {
       return String(json.data.key);
     }
   } catch (err) {
     // ignore and return null on failure
+    console.error(err);
   }
   return null;
 }
