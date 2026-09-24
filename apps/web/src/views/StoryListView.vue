@@ -261,6 +261,15 @@
                 <span>审核</span>
               </button>
               <button
+                v-else
+                class="btn btn-primary btn-xs gap-1"
+                @click="router.push({ name: 'admin-review-detail', params: { id: s.id } })"
+                title="查看故事"
+              >
+                <Icon icon="mdi:eye-outline" class="w-3.5 h-3.5" />
+                <span>查看</span>
+              </button>
+              <button
                 v-if="s.status === 'published'"
                 class="btn btn-ghost btn-error btn-xs btn-square hover:bg-error/10 hover:text-error"
                 @click="confirmUnpublish(s.id!)"
