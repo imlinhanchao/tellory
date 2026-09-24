@@ -32,6 +32,10 @@ export default defineConfig({
         target: "http://localhost:3000",
         changeOrigin: true,
       },
+      "/api/upload": {
+        target: "http://localhost:7532", // Upload service
+        changeOrigin: true,
+      }
     },
   },
 });
