@@ -106,7 +106,7 @@
         </button>
       </div>
 
-      <div v-if="userInfo.uploadKey" class="inline md:tooltip tooltip-bottom" data-tip="上传图片并以 Markdown 插入" data-tour="tool-upload">
+      <div v-if="userInfo.uploadKey" class="inline md:tooltip tooltip-bottom" data-tip="上传图片并以 Markdown 插入（支持粘贴）" data-tour="tool-upload">
         <button class="btn btn-sm btn-ghost btn-square" type="button" @click="onUploadClick">
           <Icon icon="mdi:image" class="text-lg" />
         </button>
@@ -183,6 +183,7 @@
         :readonly="readOnly"
         class="h-105 w-full resize-none rounded-xl border border-base-300 bg-base-100 p-0 font-mono text-sm outline-none transition"
         spellcheck="false"
+        @paste="onTextareaPaste"
       />
     </section>
     <div class="mt-3 flex items-center gap-2 px-3 pb-3">
@@ -570,6 +571,9 @@ watch(
         const v = cm.getValue();
         content.value = v;
       });
+      storyCmInstance.on('paste', (_cm: any, event: ClipboardEvent) => {
+        void onEditorPaste(event);
+      });
       storyCmInstance.setOption('readOnly', props.readOnly ? 'nocursor' : false);
     } else {
       storyCmInstance.setOption('theme', theme);
@@ -824,6 +828,10 @@ let currentXhr: XMLHttpRequest | null = null;
 
 function onUploadClick() {
   if (props.readOnly) return;
+  if (!userInfo.uploadKey) {
+    Message.error('缺少上传凭证，无法上传图片。');
+    return;
+  }
   fileInput.value?.click();
 }
 
@@ -833,16 +841,38 @@ function cancelUpload() {
       currentXhr.abort();
     } catch {}
   }
+  currentXhr = null;
   uploadState.value.uploading = false;
+  uploadState.value.processing = false;
   uploadState.value.percent = 0;
 }
 
-async function onFileChange(e: Event) {
-  const input = e.target as HTMLInputElement;
-  const files = input.files;
-  if (!files || files.length === 0) return;
+function getClipboardImageFiles(event: ClipboardEvent): File[] {
+  const dt = event.clipboardData;
+  if (!dt) return [];
+
+  const fromItems: File[] = [];
+  for (const item of Array.from(dt.items || [])) {
+    if (item.kind !== 'file') continue;
+    if (!item.type || !item.type.startsWith('image/')) continue;
+    const file = item.getAsFile();
+    if (file) fromItems.push(file);
+  }
+
+  if (fromItems.length > 0) return fromItems;
+
+  return Array.from(dt.files || []).filter((f) => f.type?.startsWith('image/'));
+}
+
+async function uploadAndInsertImages(files: File[]) {
+  if (!files.length) return;
+  if (!userInfo.uploadKey) {
+    Message.error('缺少上传凭证，无法上传图片。');
+    return;
+  }
+
   try {
-    const compressed = await Promise.all(Array.from(files).map(compressIfNeeded));
+    const compressed = await Promise.all(files.map(compressIfNeeded));
     uploadState.value.filename = compressed.map((f) => f.name).join(', ');
     uploadState.value.percent = 0;
     uploadState.value.processing = false;
@@ -871,12 +901,37 @@ async function onFileChange(e: Event) {
     }
     Message && Message.success && Message.success('图片上传并插入完成');
   } catch (err: any) {
-    Message.error(err?.message || String(err));
+    const text = err?.message || String(err || '');
+    const canceled = /abort|cancel/i.test(text);
+    if (!canceled) Message.error(text);
   } finally {
-    if (input) input.value = '';
+    currentXhr = null;
     uploadState.value.uploading = false;
     uploadState.value.processing = false;
     uploadState.value.percent = 0;
+  }
+}
+
+async function onEditorPaste(event: ClipboardEvent) {
+  if (props.readOnly) return;
+  const imageFiles = getClipboardImageFiles(event);
+  if (!imageFiles.length) return;
+  event.preventDefault();
+  await uploadAndInsertImages(imageFiles);
+}
+
+function onTextareaPaste(event: ClipboardEvent) {
+  void onEditorPaste(event);
+}
+
+async function onFileChange(e: Event) {
+  const input = e.target as HTMLInputElement;
+  const files = input.files;
+  if (!files || files.length === 0) return;
+  try {
+    await uploadAndInsertImages(Array.from(files));
+  } finally {
+    if (input) input.value = '';
   }
 }
 </script>
