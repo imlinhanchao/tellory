@@ -6,11 +6,13 @@ import {
   Delete,
   Body,
   Param,
+  Query,
   UseGuards,
   Request,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { OptionalAuthGuard } from '../auth/optional-auth.guard';
+import { AdminGuard } from '../auth/admin.guard';
 import { PlayService } from './play.service';
 import { UpdatePlayDto } from './play.dto';
 import { StoriesService } from '../stories/stories.service';
@@ -45,6 +47,50 @@ export class PlayController {
   @Get('reader/:storyId')
   async getReader(@Param('storyId') storyId: string, @Request() req) {
     return this.playService.getReaders(storyId, req.user?.userId);
+  }
+
+  @UseGuards(JwtAuthGuard, AdminGuard)
+  @Get('admin/list')
+  async adminList(
+    @Query('limit') limit?: number,
+    @Query('createdAt') createdAt?: number,
+    @Query('storyId') storyId?: string,
+    @Query('userId') userId?: string,
+  ) {
+    return this.playService.listForAdmin({
+      limit,
+      createdAt,
+      storyId,
+      userId,
+    });
+  }
+
+  @UseGuards(JwtAuthGuard, AdminGuard)
+  @Get('admin/:playId')
+  async adminDetail(@Param('playId') playId: string) {
+    const play = await this.playService.findOne(playId);
+    if (!play) {
+      throw new Error('游玩记录不存在');
+    }
+    const story = play.storyId
+      ? await this.storiesService.findById(play.storyId, false)
+      : null;
+    const decodedDataset = this.storyRuntimeService.decodeDataset(
+      play.dataset || '',
+    );
+    return {
+      ...play,
+      story: story
+        ? {
+            id: story.id,
+            title: story.title,
+            shortname: story.shortname,
+            authorId: story.authorId,
+            status: story.status,
+          }
+        : null,
+      decodedDataset,
+    };
   }
 
   @Get('story/:id')

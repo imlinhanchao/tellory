@@ -67,3 +67,59 @@ export const getReaders = (storyId: string) => {
     url: `/play/reader/${storyId}`,
   });
 };
+
+export interface IAdminPlayRow {
+  id: string;
+  storyId: string;
+  userId?: string;
+  currentPassage: string;
+  html: string;
+  variables: Record<string, any>;
+  dataset?: string;
+  history: Array<{
+    from: string;
+    to: string;
+    action: string;
+    at: number;
+    variables?: Record<string, any>;
+  }>;
+  isEnding: boolean;
+  createdAt: number;
+  updatedAt: number;
+  story?: {
+    id: string;
+    title?: string;
+    shortname?: string | null;
+    authorId?: string;
+    status?: string;
+  } | null;
+  user?: {
+    id: string;
+    username: string;
+    nickname: string;
+    avatar: string;
+    from: string;
+  } | null;
+}
+
+export interface IAdminPlayDetail extends IAdminPlayRow {
+  decodedDataset?: Record<string, any> | null;
+}
+
+export const adminListPlays = (params: {
+  limit?: number;
+  createdAt?: number;
+  storyId?: string;
+  userId?: string;
+} = {}) => {
+  return request.get<{ data: IAdminPlayRow[]; total: number }>({
+    url: '/play/admin/list',
+    params,
+  });
+};
+
+export const adminGetPlayDetail = (playId: string) => {
+  return request.get<IAdminPlayDetail>({
+    url: `/play/admin/${playId}`,
+  });
+};

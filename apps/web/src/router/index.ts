@@ -82,6 +82,12 @@ const router = createRouter({
           meta: { title: "举报处理", loginRequired: true, adminRequired: true },
         },
         {
+          path: "/admin/plays",
+          name: "admin-plays",
+          component: () => import("@/views/AdminPlayView.vue"),
+          meta: { title: "游玩管理", loginRequired: true, adminRequired: true },
+        },
+        {
           path: "/:from/:username",
           name: "user-profile-from",
           component: () => import("@/views/UserProfileView.vue"),

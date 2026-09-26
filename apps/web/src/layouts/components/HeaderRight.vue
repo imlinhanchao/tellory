@@ -261,6 +261,12 @@
             举报处理
           </router-link>
         </li>
+        <li v-if="authStore.isAdmin">
+          <router-link to="/admin/plays">
+            <Icon icon="mdi:gamepad-variant-outline" class="w-4 h-4" />
+            游玩管理
+          </router-link>
+        </li>
         <span class="divider my-0"></span>
         <li>
           <a class="text-error" @click.prevent="handleLogout">

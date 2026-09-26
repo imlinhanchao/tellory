@@ -356,6 +356,16 @@ export class StoryRuntimeService {
     }
   }
 
+  // Public helper for admin/debug views to inspect the encrypted runtime dataset.
+  decodeDataset(dataset: string): Record<string, unknown> | null {
+    try {
+      if (!dataset) return null;
+      return this.decryptDataset(dataset) as unknown as Record<string, unknown>;
+    } catch {
+      return null;
+    }
+  }
+
   private decryptDataset(dataset: string): RuntimeState {
     try {
       const payload = Buffer.from(dataset, 'base64url');

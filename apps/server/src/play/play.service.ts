@@ -10,6 +10,13 @@ import { User } from 'src/users/user.entity';
 import { UsersService } from 'src/users/users.service';
 import { Story } from 'src/stories/story.entity';
 
+type AdminPlayQuery = {
+  limit?: number;
+  createdAt?: number;
+  storyId?: string;
+  userId?: string;
+};
+
 @Injectable()
 export class PlayService {
   constructor(
@@ -155,5 +162,66 @@ export class PlayService {
     const userIds = p.filter((p) => p.userId !== userId).map((p) => p.userId);
     const readers = await this.usersService.getUsers(userIds);
     return readers.map((r) => omit(r, User.unsafeKey));
+  }
+
+  async listForAdmin(query: AdminPlayQuery) {
+    const take = Math.max(1, Math.min(Number(query.limit) || 20, 100));
+    const createdAt = Number(query.createdAt) || Date.now();
+
+    const qb = this.playRepo
+      .createQueryBuilder('play')
+      .where('play.createdAt <= :createdAt', { createdAt })
+      .orderBy('play.createdAt', 'DESC')
+      .take(take);
+
+    if (query.storyId) {
+      qb.andWhere('play.storyId = :storyId', { storyId: query.storyId });
+    }
+    if (query.userId) {
+      qb.andWhere('play.userId = :userId', { userId: query.userId });
+    }
+
+    const [rows, total] = await qb.getManyAndCount();
+    const storyIds = Array.from(
+      new Set(rows.map((row) => row.storyId).filter(Boolean)),
+    );
+    const userIds = Array.from(
+      new Set(rows.map((row) => row.userId).filter(Boolean)),
+    ) as string[];
+
+    const stories = storyIds.length
+      ? await this.storiesService.getStorysByIds(storyIds)
+      : [];
+    const users = userIds.length
+      ? await this.usersService.getUsers(userIds)
+      : [];
+
+    const data = rows.map((row) => {
+      const story = stories.find((s) => s.id === row.storyId);
+      const user = users.find((u) => u.id === row.userId);
+      return {
+        ...row,
+        story: story
+          ? {
+              id: story.id,
+              title: story.title,
+              shortname: story.shortname,
+              authorId: story.authorId,
+              status: story.status,
+            }
+          : null,
+        user: user
+          ? {
+              id: user.id,
+              username: user.username,
+              nickname: user.nickname,
+              avatar: user.avatar,
+              from: user.from,
+            }
+          : null,
+      };
+    });
+
+    return { data, total };
   }
 }
