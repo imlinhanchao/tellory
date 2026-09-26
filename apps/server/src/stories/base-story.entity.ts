@@ -10,7 +10,7 @@ export abstract class BaseStoryFields {
   @Column({ comment: '简介', nullable: true })
   description?: string;
 
-  @Column('text', { comment: '内容' })
+  @Column('longtext', { comment: '内容' })
   content: string;
 
   @Column({ comment: '文章段落数', nullable: true })
