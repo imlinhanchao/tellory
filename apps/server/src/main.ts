@@ -1,4 +1,5 @@
 import { NestFactory } from '@nestjs/core';
+import * as express from 'express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
@@ -9,6 +10,10 @@ import { getConfig } from './utils/config';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   app.setGlobalPrefix('api');
+
+  // 增加请求体大小限制，避免大型故事提交时报 "request entity too large"
+  app.use(express.json({ limit: '10mb' }));
+  app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
   // 全局过滤防缓存时间戳参数 (t / _t)，避免污染接口并触发 forbidNonWhitelisted 校验错误
   app.use((req: any, _res: any, next: any) => {
