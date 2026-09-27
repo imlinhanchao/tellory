@@ -1,6 +1,6 @@
 import type { StoryData, VariableMap } from "./types";
 import { readBalancedBlock, extractAndRegisterFunctions } from "./scanner";
-import { escapeHtml, sanitizeAllowedHtml } from "./sanitizer";
+import { escapeHtml, escapeHtmlText, sanitizeAllowedHtml } from "./sanitizer";
 
 /** A rendered achievement/ending marker. */
 export interface StorySpecialMarker {
@@ -786,14 +786,14 @@ export function renderPointMarker(marker: StorySpecialMarker): string {
   const title = marker.description
     ? ` title="${escapeHtml(marker.description)}"`
     : "";
-  return `<span class="story-point"${title}>${escapeHtml(marker.name)}</span>`;
+  return `<span class="story-point"${title}>${escapeHtmlText(marker.name)}</span>`;
 }
 
 export function renderEndingMarker(marker: StorySpecialMarker): string {
   const title = marker.description
     ? ` title="${escapeHtml(marker.description)}"`
     : "";
-  return `<span class="story-end"${title}>${escapeHtml(marker.name)}</span>`;
+  return `<span class="story-end"${title}>${escapeHtmlText(marker.name)}</span>`;
 }
 
 /**
@@ -869,7 +869,7 @@ export function renderMarkdownInline(input: string): string {
       const codePlaceholders: string[] = [];
       let working = segment.replace(/`([^`]+)`/g, (_full, code) => {
         const placeholder = `__INLINE_CODE_${codePlaceholders.length}__`;
-        codePlaceholders.push(`<code>${escapeHtml(code)}</code>`);
+        codePlaceholders.push(`<code>${escapeHtmlText(code)}</code>`);
         return placeholder;
       });
 
@@ -966,7 +966,7 @@ export function renderMarkdownBlocks(input: string): string {
     if (inCodeBlock) {
       if (/^```\s*$/.test(trimmed)) {
         output.push(
-          `<pre><code${codeLanguage ? ` class="language-${escapeHtml(codeLanguage)}"` : ""}>${escapeHtml(codeLines.join("\n"))}</code></pre>`,
+          `<pre><code${codeLanguage ? ` class="language-${escapeHtml(codeLanguage)}"` : ""}>${escapeHtmlText(codeLines.join("\n"))}</code></pre>`,
         );
         inCodeBlock = false;
         codeLines = [];
@@ -1063,7 +1063,7 @@ export function renderMarkdownBlocks(input: string): string {
 
   if (inCodeBlock) {
     output.push(
-      `<pre><code${codeLanguage ? ` class="language-${escapeHtml(codeLanguage)}"` : ""}>${escapeHtml(codeLines.join("\n"))}</code></pre>`,
+      `<pre><code${codeLanguage ? ` class="language-${escapeHtml(codeLanguage)}"` : ""}>${escapeHtmlText(codeLines.join("\n"))}</code></pre>`,
     );
   }
 
@@ -1272,7 +1272,7 @@ export function buildStoryLink(
   const displayAttribute = displayTarget
     ? ` data-story-display="${escapeHtml(encodeAttributeValue(ctx, displayTarget))}"`
     : "";
-  return `<button type="button" class="story-link"${targetAttribute}${actionAttribute}${displayAttribute}>${escapeHtml(label)}</button>`;
+  return `<button type="button" class="story-link"${targetAttribute}${actionAttribute}${displayAttribute}>${escapeHtmlText(label)}</button>`;
 }
 
 /**
@@ -1377,7 +1377,7 @@ export function replaceTextWithHtml(
     (_full: string, name: string, argsRaw?: string) => {
       const args = parseCallArgs(argsRaw, variables);
       const result = ctx.callFunction(name, args, variables);
-      return escapeHtml(String(result ?? ""));
+      return escapeHtmlText(String(result ?? ""));
     },
   );
 
@@ -1403,7 +1403,7 @@ export function replaceTextWithHtml(
   const printPattern = /\(print:\s*([^)]*?)\)/g;
   working = working.replace(printPattern, (_all, expression: string) => {
     const resolved = evaluateExpression(expression, variables, ctx);
-    return escapeHtml(String(resolved));
+    return escapeHtmlText(String(resolved));
   });
 
   const gotoPattern = /\(goto:\s*["']([^"']+)['"]\s*\)/g;
