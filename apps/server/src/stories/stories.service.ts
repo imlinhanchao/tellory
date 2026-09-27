@@ -4,6 +4,7 @@ import { Repository, Like, LessThanOrEqual, In } from 'typeorm';
 import { UsersService } from 'src/users/users.service';
 import { Story } from './story.entity';
 import { ApprovedStory } from './approved-story.entity';
+import { StoryHistory } from './story-history.entity';
 import { StoryDto } from './stories.dto';
 import { omit } from 'src/utils';
 import { FingerTo } from 'fishpi';
@@ -33,6 +34,8 @@ export class StoriesService {
     private storiesRepo: Repository<Story>,
     @InjectRepository(ApprovedStory)
     private approvedRepo: Repository<ApprovedStory>,
+    @InjectRepository(StoryHistory)
+    private storyHistoryRepo: Repository<StoryHistory>,
     private readonly usersService: UsersService,
     private readonly notificationService: NotificationService,
   ) {}
@@ -114,6 +117,11 @@ export class StoriesService {
         sourceStoryId: In(ids),
       },
     });
+  }
+
+  /** 查询某故事当前的已上架快照（不存在时返回 null） */
+  async findApprovedBySourceId(storyId: string): Promise<ApprovedStory | null> {
+    return this.approvedRepo.findOne({ where: { sourceStoryId: storyId } });
   }
 
   async findAll(
@@ -453,6 +461,8 @@ export class StoriesService {
     });
     let result: ApprovedStory;
     if (existing) {
+      // 审核通过新版本前，先将被替换的上一版本归档到故事历史表
+      await this.archivePreviousSnapshot(existing);
       existing.title = approved.title;
       existing.description = approved.description;
       existing.content = approved.content;
@@ -494,6 +504,28 @@ export class StoriesService {
 
     await this.sendReviewNotice(story, 'approved', undefined, domain);
     return result;
+  }
+
+  /** 将上一版本（被替换的已上架快照）归档到故事历史表 */
+  private async archivePreviousSnapshot(
+    snapshot: ApprovedStory,
+  ): Promise<void> {
+    const history = new StoryHistory();
+    history.storyId = snapshot.sourceStoryId;
+    history.title = snapshot.title;
+    history.shortname = snapshot.shortname;
+    history.description = snapshot.description;
+    history.content = snapshot.content;
+    history.passageSize = snapshot.passageSize;
+    history.pointSize = snapshot.pointSize;
+    history.endSize = snapshot.endSize;
+    history.startPassage = snapshot.startPassage;
+    history.authorId = snapshot.authorId;
+    history.tags = snapshot.tags;
+    history.approvedBy = snapshot.approvedBy;
+    history.approvedAt = snapshot.approvedAt;
+    history.archivedAt = Date.now();
+    await this.storyHistoryRepo.save(history);
   }
 
   /** 管理员拒绝投稿，保存原因并标记状态 */
@@ -544,5 +576,70 @@ export class StoriesService {
       await this.approvedRepo.save(approved);
     }
     return true;
+  }
+
+  /** 管理员：分页查询某故事的历史版本列表（不含 content，减小传输体积） */
+  async listStoryHistory(storyId: string, page?: number, limit?: number) {
+    const p = Math.max(1, Number(page) || 1);
+    const take = Math.max(1, Math.min(Number(limit) || 20, 100));
+    const [rows, total] = await this.storyHistoryRepo.findAndCount({
+      where: { storyId },
+      order: { archivedAt: 'DESC' },
+      skip: (p - 1) * take,
+      take,
+      select: {
+        id: true,
+        storyId: true,
+        title: true,
+        shortname: true,
+        description: true,
+        passageSize: true,
+        pointSize: true,
+        endSize: true,
+        startPassage: true,
+        authorId: true,
+        tags: true,
+        approvedBy: true,
+        approvedAt: true,
+        archivedAt: true,
+      },
+    });
+
+    // 附加审核人信息
+    const approverIds = Array.from(
+      new Set(rows.map((r) => r.approvedBy).filter(Boolean)),
+    ) as string[];
+    const approvers = approverIds.length
+      ? await this.usersService.getUsers(approverIds)
+      : [];
+
+    const data = rows.map((r) => {
+      const approver = approvers.find((u) => u.id === r.approvedBy);
+      return {
+        ...r,
+        approvedByUser: approver
+          ? {
+              id: approver.id,
+              username: approver.username,
+              nickname: approver.nickname,
+              avatar: approver.avatar,
+              from: approver.from,
+            }
+          : null,
+      };
+    });
+
+    return {
+      data,
+      total,
+      page: p,
+      limit: take,
+      totalPages: Math.max(1, Math.ceil(total / take)),
+    };
+  }
+
+  /** 管理员：获取单个历史版本详情（含 content） */
+  async findStoryHistoryById(historyId: string): Promise<StoryHistory | null> {
+    return this.storyHistoryRepo.findOne({ where: { id: historyId } });
   }
 }

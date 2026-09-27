@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Story } from './story.entity';
 import { ApprovedStory } from './approved-story.entity';
+import { StoryHistory } from './story-history.entity';
 import { StoriesService } from './stories.service';
 import { StoriesController } from './stories.controller';
 import { UsersModule } from 'src/users/users.module';
@@ -10,7 +11,7 @@ import { NotificationModule } from '../notification/notification.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Story, ApprovedStory]),
+    TypeOrmModule.forFeature([Story, ApprovedStory, StoryHistory]),
     UsersModule,
     NotificationModule,
   ],

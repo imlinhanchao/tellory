@@ -6,6 +6,22 @@
         <h2 class="text-xl font-bold">审核：{{ story?.title }}</h2>
         <div class="flex items-center gap-2">
           <button class="btn btn-sm" @click="goBack">返回</button>
+          <button
+            class="btn btn-sm btn-ghost"
+            :disabled="!approved?.content"
+            :title="
+              approved?.content
+                ? '对比当前已发布版本与提审版本的 content 差异'
+                : '该故事尚无已发布版本，无法对比'
+            "
+            @click="openDiff"
+          >
+            <Icon icon="mdi:compare" class="w-4 h-4" />
+            版本对比
+          </button>
+          <button class="btn btn-sm btn-ghost" @click="goHistory">
+            历史版本
+          </button>
           <button class="btn btn-sm btn-ghost" @click="rejectPrompt">
             拒绝
           </button>
@@ -14,28 +30,118 @@
       </div>
       <StoryEditorView :readOnly="true" :initialStory="story" />
     </div>
+
+    <!-- 已发布版本 vs 提审版本 内容差异弹窗 -->
+    <dialog ref="diffDialogRef" class="modal">
+      <div class="modal-box max-w-384 w-11/12 p-0 overflow-hidden">
+        <div
+          class="px-5 py-4 border-b border-base-200 flex items-center justify-between gap-3 flex-wrap"
+        >
+          <div class="flex items-center gap-2 flex-wrap">
+            <h3 class="font-bold text-base">版本内容差异</h3>
+            <span class="badge badge-sm badge-ghost">
+              已发布版本{{ approvedText }}
+            </span>
+            <Icon icon="mdi:arrow-right" class="w-4 h-4 text-base-content/50" />
+            <span class="badge badge-sm badge-primary badge-soft">提审版本</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <select
+              v-model="diffLayout"
+              class="select select-bordered select-xs"
+              title="对比布局"
+            >
+              <option value="side-by-side">并排</option>
+              <option value="line-by-line">行内</option>
+            </select>
+            <select
+              v-model="diffStyle"
+              class="select select-bordered select-xs"
+              title="高亮粒度"
+            >
+              <option value="word">按词对比</option>
+              <option value="char">按字符对比</option>
+            </select>
+            <form method="dialog">
+              <button class="btn btn-sm btn-circle btn-ghost">✕</button>
+            </form>
+          </div>
+        </div>
+
+        <div class="p-4 max-h-[78vh] overflow-y-auto">
+          <CodeDiff
+            v-if="approved"
+            :old-string="approved.content || ''"
+            :new-string="story?.content || ''"
+            language="plaintext"
+            :output-format="diffLayout"
+            :diff-style="diffStyle"
+            :theme="isDark ? 'dark' : 'light'"
+            filename="content"
+            max-height="62vh"
+          />
+        </div>
+      </div>
+      <form method="dialog" class="modal-backdrop">
+        <button>close</button>
+      </form>
+    </dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from "vue";
+import { computed, ref, onMounted } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import { Icon } from "@iconify/vue";
+import { CodeDiff } from "v-code-diff/vue3";
 import StoryEditorView from "@/views/StoryEditorView.vue";
-import { getStory, approveStory, rejectStory } from "@/api/stories";
+import {
+  getStory,
+  getApprovedStorySnapshot,
+  approveStory,
+  rejectStory,
+  type IApprovedStorySnapshot,
+} from "@/api/stories";
+import { useAppStore } from "@/stores/modules/app";
 import msg from "@/components/msg";
 import msgbox from "@/components/msgbox";
 
 const route = useRoute();
 const router = useRouter();
+const appStore = useAppStore();
 const id = (route.params.id as string) || "";
 const story = ref<any | null>(null);
 const loading = ref(true);
+const isDark = computed(() => appStore.getTheme === "dark");
+
+/** 当前已发布快照（提审前线上生效的版本），可能不存在（首次上架） */
+const approved = ref<IApprovedStorySnapshot | null>(null);
+
+// 差异弹窗状态
+const diffDialogRef = ref<HTMLDialogElement | null>(null);
+const diffLayout = ref<"side-by-side" | "line-by-line">("side-by-side");
+const diffStyle = ref<"word" | "char">("word");
+
+const formatTime = (ts?: number) => {
+  if (!ts) return "-";
+  return new Date(Number(ts)).toLocaleString();
+};
+
+const approvedText = computed(() =>
+  approved.value?.approvedAt
+    ? `（通过于 ${formatTime(approved.value.approvedAt)}）`
+    : "",
+);
 
 const load = async () => {
   loading.value = true;
   try {
-    const res = await getStory(id);
-    story.value = res;
+    const [storyRes, approvedRes] = await Promise.all([
+      getStory(id),
+      getApprovedStorySnapshot(id).catch(() => null),
+    ]);
+    story.value = storyRes;
+    approved.value = approvedRes || null;
   } catch (e) {
     msg.error("加载失败");
   } finally {
@@ -44,6 +150,18 @@ const load = async () => {
 };
 
 const goBack = () => router.back();
+
+const goHistory = () => {
+  router.push({ name: "admin-story-history", params: { id } });
+};
+
+const openDiff = () => {
+  if (!approved.value?.content) {
+    msg.error("该故事尚无已发布版本，无法对比");
+    return;
+  }
+  diffDialogRef.value?.showModal();
+};
 
 const approve = async () => {
   try {

@@ -76,6 +76,16 @@ const router = createRouter({
           meta: { title: "所有故事", loginRequired: true, adminRequired: true },
         },
         {
+          path: "/admin/stories/:id/history",
+          name: "admin-story-history",
+          component: () => import("@/views/AdminStoryHistoryView.vue"),
+          meta: {
+            title: "故事历史版本",
+            loginRequired: true,
+            adminRequired: true,
+          },
+        },
+        {
           path: "/admin/reports",
           name: "admin-reports",
           component: () => import("@/views/AdminReportView.vue"),

@@ -124,6 +124,35 @@ export class StoriesController {
     return { data: pending, total: pending.length };
   }
 
+  // 管理员：查看某历史版本详情（含 content，用于内容查看与比对）
+  @UseGuards(JwtAuthGuard, AdminGuard)
+  @Get('admin/history/:historyId')
+  async historyDetail(@Param('historyId') historyId: string) {
+    const history = await this.storiesService.findStoryHistoryById(historyId);
+    if (!history) {
+      throw new Error('历史版本不存在');
+    }
+    return history;
+  }
+
+  // 管理员：分页查询某故事的历史版本列表
+  @UseGuards(JwtAuthGuard, AdminGuard)
+  @Get('admin/:id/history')
+  async historyList(
+    @Param('id') id: string,
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+  ) {
+    return this.storiesService.listStoryHistory(id, page, limit);
+  }
+
+  // 管理员：获取某故事当前已发布快照（用于审核时对比提审版本内容差异）
+  @UseGuards(JwtAuthGuard, AdminGuard)
+  @Get('admin/:id/approved')
+  async approvedSnapshot(@Param('id') id: string) {
+    return this.storiesService.findApprovedBySourceId(id);
+  }
+
   // 管理员审核通过并上架
   @UseGuards(JwtAuthGuard, AdminGuard)
   @Post(':id/approve')
