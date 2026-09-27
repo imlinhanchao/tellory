@@ -69,16 +69,14 @@
         </div>
 
         <div class="p-4 max-h-[78vh] overflow-y-auto">
-          <CodeDiff
+          <StoryDiffViewer
             v-if="approved"
-            :old-string="approved.content || ''"
-            :new-string="story?.content || ''"
-            language="plaintext"
-            :output-format="diffLayout"
-            :diff-style="diffStyle"
-            :theme="isDark ? 'dark' : 'light'"
-            filename="content"
-            max-height="62vh"
+            :old-content="approved.content || ''"
+            :new-content="story?.content || ''"
+            old-label="已发布版本（线上快照）"
+            new-label="提审版本（最新修改）"
+            :old-meta="approved.approvedAt ? `通过于 ${new Date(Number(approved.approvedAt)).toLocaleString()}` : ''"
+            :new-meta="story?.updatedAt ? `更新于 ${new Date(Number(story.updatedAt)).toLocaleString()}` : ''"
           />
         </div>
       </div>
@@ -93,7 +91,7 @@
 import { computed, ref, onMounted } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { Icon } from "@iconify/vue";
-import { CodeDiff } from "v-code-diff/vue3";
+import StoryDiffViewer from "@/components/StoryDiff/StoryDiffViewer.vue";
 import StoryEditorView from "@/views/StoryEditorView.vue";
 import {
   getStory,

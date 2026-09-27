@@ -148,14 +148,19 @@ export async function listStoryHistory(
     limit: number;
     totalPages: number;
   }>({
-    url: `/stories/admin/${storyId}/history`,
+    url: `/stories/${storyId}/history`,
     params,
   });
 }
 
-export async function getStoryHistoryDetail(historyId: string) {
+export async function getStoryHistoryDetail(
+  historyId: string,
+  storyId?: string,
+) {
   return request.get<IStoryHistoryItem>({
-    url: `/stories/admin/history/${historyId}`,
+    url: storyId
+      ? `/stories/${storyId}/history/${historyId}`
+      : `/stories/history/${historyId}`,
   });
 }
 
@@ -177,10 +182,10 @@ export interface IApprovedStorySnapshot {
   isUnpublished?: boolean;
 }
 
-/** 管理员：获取某故事当前已发布快照（不存在时返回 null） */
+/** 获取某故事当前已发布快照（不存在时返回 null，作者与管理员均可访问） */
 export async function getApprovedStorySnapshot(storyId: string) {
   return request.get<IApprovedStorySnapshot | null>({
-    url: `/stories/admin/${storyId}/approved`,
+    url: `/stories/${storyId}/approved`,
   });
 }
 

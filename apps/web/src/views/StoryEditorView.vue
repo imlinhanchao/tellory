@@ -176,6 +176,16 @@
           </form>
         </dialog>
       </Teleport>
+
+      <!-- 历史版本与比对弹窗 -->
+      <Teleport to="body">
+        <StoryHistoryModal
+          ref="storyHistoryModalRef"
+          :story-id="currentStoryId || ''"
+          :story-title="story.title"
+          :current-content="currentSerializedStory"
+        />
+      </Teleport>
       <main
         class="rounded-2xl border border-base-300 bg-base-100 md:p-4 shadow-sm w-full"
       >
@@ -301,6 +311,20 @@
                   @click="openBetaDialog"
                 >
                   <Icon icon="mdi:account-group-outline" size="16px" />
+                </button>
+              </div>
+              <div
+                v-if="currentStoryId && !props.readOnly"
+                class="tooltip tooltip-bottom"
+                data-tip="历史发布版本与比对"
+                data-tour="btn-history"
+              >
+                <button
+                  class="btn btn-sm btn-ghost btn-square"
+                  type="button"
+                  @click="openStoryHistory"
+                >
+                  <Icon icon="mdi:history" size="16px" />
                 </button>
               </div>
               <div
@@ -770,6 +794,7 @@ import Tour from "@/components/Tour/src/Tour.vue";
 import type { TourStep } from "@/components/Tour/src/types";
 import { availableTourSteps } from "@/lib/editorTour";
 import { delay } from "@/utils";
+import StoryHistoryModal from "@/components/StoryHistory/StoryHistoryModal.vue";
 
 const props = defineProps<{ readOnly?: boolean; initialStory?: any }>();
 
@@ -1655,6 +1680,23 @@ function resetBetaDialog() {
   betaAdding.value = null;
   betaRemoving.value = null;
   betaTesters.value = [];
+}
+
+/* ---------------------------- 故事历史发布版本与比对 ---------------------------- */
+const storyHistoryModalRef = ref<InstanceType<typeof StoryHistoryModal> | null>(null);
+
+const currentSerializedStory = computed(() => {
+  try {
+    return serializeStory(story.value);
+  } catch (e) {
+    console.error("[StoryEditor] serializeStory failed", e);
+    return "";
+  }
+});
+
+function openStoryHistory() {
+  if (!currentStoryId.value) return;
+  storyHistoryModalRef.value?.showModal();
 }
 
 // keep tag editor sync with selected passage

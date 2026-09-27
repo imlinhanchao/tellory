@@ -79,6 +79,24 @@ export class StoriesController {
     return this.storiesService.getUserBetaStories(userId);
   }
 
+  // 作者/管理员：查看某历史版本详情（含 content，用于内容查看与比对）
+  @Get('history/:historyId')
+  @UseGuards(JwtAuthGuard)
+  async historyDetailById(
+    @Param('historyId') historyId: string,
+    @Request() req: any,
+  ) {
+    const history = await this.storiesService.findStoryHistoryById(historyId);
+    if (!history) {
+      throw new Error('历史版本不存在');
+    }
+    const story = await this.storiesService.findOne(history.storyId);
+    if (!story || (story.authorId !== req.user.userId && !req.user.isAdmin)) {
+      throw new Error('无权操作');
+    }
+    return history;
+  }
+
   @Get(':id')
   @UseGuards(OptionalAuthGuard)
   async get(@Param('id') id: string, @Request() req) {
@@ -163,6 +181,61 @@ export class StoriesController {
     }
     await this.storiesService.removeBetaTester(story.id, userId);
     return { success: true };
+  }
+
+  /** 作者/管理员：分页查询某故事的历史版本列表 */
+  @UseGuards(JwtAuthGuard)
+  @Get(':id/history')
+  async storyHistoryList(
+    @Param('id') id: string,
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+    @Request() req?: any,
+  ) {
+    const story = await this.storiesService.findOne(id);
+    if (!story) {
+      throw new Error('故事不存在');
+    }
+    if (story.authorId !== req.user.userId && !req.user.isAdmin) {
+      throw new Error('无权操作');
+    }
+    return this.storiesService.listStoryHistory(id, page, limit);
+  }
+
+  /** 作者/管理员：查看某历史版本详情（含 content，用于内容查看与比对） */
+  @UseGuards(JwtAuthGuard)
+  @Get(':id/history/:historyId')
+  async storyHistoryDetail(
+    @Param('id') id: string,
+    @Param('historyId') historyId: string,
+    @Request() req: any,
+  ) {
+    const story = await this.storiesService.findOne(id);
+    if (!story) {
+      throw new Error('故事不存在');
+    }
+    if (story.authorId !== req.user.userId && !req.user.isAdmin) {
+      throw new Error('无权操作');
+    }
+    const history = await this.storiesService.findStoryHistoryById(historyId);
+    if (!history || history.storyId !== id) {
+      throw new Error('历史版本不存在');
+    }
+    return history;
+  }
+
+  /** 作者/管理员：获取某故事当前已发布快照（用于对比当前版本与已发布版本内容差异） */
+  @UseGuards(JwtAuthGuard)
+  @Get(':id/approved')
+  async storyApprovedSnapshot(@Param('id') id: string, @Request() req: any) {
+    const story = await this.storiesService.findOne(id);
+    if (!story) {
+      throw new Error('故事不存在');
+    }
+    if (story.authorId !== req.user.userId && !req.user.isAdmin) {
+      throw new Error('无权操作');
+    }
+    return this.storiesService.findApprovedBySourceId(id);
   }
 
   @UseGuards(JwtAuthGuard)

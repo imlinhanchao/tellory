@@ -278,6 +278,17 @@
               />
             </button>
             <button
+              v-if="s.authorId == getUser?.id && isCurrentUser"
+              class="btn btn-ghost btn-xs btn-square hover:bg-base-300/50"
+              @click="router.push({ name: 'story-history', params: { id: s.id } })"
+              title="历史发布版本与比对"
+            >
+              <Icon
+                icon="mdi:history"
+                class="w-4 h-4 text-base-content/70"
+              />
+            </button>
+            <button
               v-if="s.authorId == getUser?.id && isCurrentUser && s.status === 'draft'"
               class="btn btn-ghost btn-xs btn-square hover:bg-error/10 hover:text-error"
               @click="confirmDelete(s.id!)"

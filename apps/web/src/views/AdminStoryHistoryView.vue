@@ -15,7 +15,12 @@
             <h2 class="text-xl font-bold text-base-content tracking-tight">
               故事历史版本
             </h2>
-            <span class="badge badge-primary badge-soft badge-xs">管理员</span>
+            <span
+              class="badge badge-xs"
+              :class="authStore.isAdmin ? 'badge-primary badge-soft' : 'badge-neutral badge-soft'"
+            >
+              {{ authStore.isAdmin ? "管理员" : "作者" }}
+            </span>
           </div>
           <p class="text-xs text-base-content/60 mt-0.5">
             {{ story?.title || "加载中…" }}
@@ -318,16 +323,12 @@
             <span class="loading loading-spinner loading-lg text-primary"></span>
             <p class="text-xs text-base-content/60 mt-3">正在加载版本内容…</p>
           </div>
-          <CodeDiff
+          <StoryDiffViewer
             v-else-if="compareReady"
-            :old-string="compareOld"
-            :new-string="compareNew"
-            language="plaintext"
-            :output-format="diffLayout"
-            :diff-style="diffStyle"
-            :theme="isDark ? 'dark' : 'light'"
-            filename="content"
-            max-height="62vh"
+            :old-content="compareOld"
+            :new-content="compareNew"
+            :old-label="compareMeta?.oldLabel"
+            :new-label="compareMeta?.newLabel"
           />
         </div>
       </div>
@@ -342,9 +343,10 @@
 import { computed, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { Icon } from "@iconify/vue";
-import { CodeDiff } from "v-code-diff/vue3";
 import Message from "@/components/msg";
 import { useAppStore } from "@/stores/modules/app";
+import { useAuthStore } from "@/stores/modules/auth";
+import StoryDiffViewer from "@/components/StoryDiff/StoryDiffViewer.vue";
 import {
   getStory,
   getStoryHistoryDetail,
@@ -373,6 +375,7 @@ interface IResolvedVersion {
 const route = useRoute();
 const router = useRouter();
 const appStore = useAppStore();
+const authStore = useAuthStore();
 const storyId = (route.params.id as string) || "";
 const isDark = computed(() => appStore.getTheme === "dark");
 

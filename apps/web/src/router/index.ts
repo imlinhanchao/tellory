@@ -40,6 +40,15 @@ const router = createRouter({
           meta: { title: "我的故事", loginRequired: true },
         },
         {
+          path: "/stories/:id/history",
+          name: "story-history",
+          component: () => import("@/views/AdminStoryHistoryView.vue"),
+          meta: {
+            title: "故事历史版本",
+            loginRequired: true,
+          },
+        },
+        {
           path: "/beta-stories",
           name: "beta-story-list",
           component: () => import("@/views/BetaStoriesView.vue"),
