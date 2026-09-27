@@ -3,8 +3,10 @@ import * as express from 'express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
+import { AuditLogInterceptor } from './common/interceptors/audit-log.interceptor';
 import { ResponseInterceptor } from './common/interceptors/response.interceptor';
 import { AppValidationPipe } from './common/pipes/validation.pipe';
+import { OperationLogService } from './operation-log/operation-log.service';
 import { getConfig } from './utils/config';
 
 async function bootstrap() {
@@ -25,7 +27,18 @@ async function bootstrap() {
   });
 
   app.useGlobalPipes(new AppValidationPipe());
-  app.useGlobalInterceptors(new ResponseInterceptor());
+
+  let operationLogService: OperationLogService | undefined;
+  try {
+    operationLogService = app.get(OperationLogService);
+  } catch {
+    operationLogService = undefined;
+  }
+
+  app.useGlobalInterceptors(
+    new AuditLogInterceptor(operationLogService),
+    new ResponseInterceptor(),
+  );
   app.useGlobalFilters(new HttpExceptionFilter());
 
   const swaggerConfig = new DocumentBuilder()

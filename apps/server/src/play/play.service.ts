@@ -11,6 +11,7 @@ import { UsersService } from 'src/users/users.service';
 import { Story } from 'src/stories/story.entity';
 
 type AdminPlayQuery = {
+  page?: number;
   limit?: number;
   createdAt?: number;
   storyId?: string;
@@ -165,13 +166,16 @@ export class PlayService {
   }
 
   async listForAdmin(query: AdminPlayQuery) {
+    const page = Math.max(1, Number(query.page) || 1);
     const take = Math.max(1, Math.min(Number(query.limit) || 20, 100));
     const createdAt = Number(query.createdAt) || Date.now();
+    const skip = (page - 1) * take;
 
     const qb = this.playRepo
       .createQueryBuilder('play')
       .where('play.createdAt <= :createdAt', { createdAt })
       .orderBy('play.createdAt', 'DESC')
+      .skip(skip)
       .take(take);
 
     if (query.storyId) {
@@ -222,6 +226,12 @@ export class PlayService {
       };
     });
 
-    return { data, total };
+    return {
+      data,
+      total,
+      page,
+      limit: take,
+      totalPages: Math.max(1, Math.ceil(total / take)),
+    };
   }
 }

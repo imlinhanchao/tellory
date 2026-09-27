@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ServeStaticModule } from '@nestjs/serve-static';
+import { ScheduleModule } from '@nestjs/schedule';
 import { ConfigService } from './config/config.service';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { PlayModule } from './play/play.module';
@@ -10,6 +11,7 @@ import { StoriesModule } from './stories/stories.module';
 import { CommentModule } from './comment/comment.module';
 import { NotificationModule } from './notification/notification.module';
 import { ConfigModule } from './config/config.module';
+import { OperationLogModule } from './operation-log/operation-log.module';
 import { join } from 'path';
 
 @Module({
@@ -21,6 +23,7 @@ import { join } from 'path';
           entities: [__dirname + '/**/*.entity{.ts,.js}'],
           synchronize: true,
         }),
+        ScheduleModule.forRoot(),
         ServeStaticModule.forRoot({
           rootPath: join(__dirname, '..', 'public'),
           exclude: ['/api/'], // 排除 API 路径
@@ -30,6 +33,7 @@ import { join } from 'path';
         PlayModule,
         CommentModule,
         NotificationModule,
+        OperationLogModule,
       ]
     : [ConfigModule],
   controllers: [AppController],

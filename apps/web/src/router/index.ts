@@ -88,6 +88,16 @@ const router = createRouter({
           meta: { title: "游玩管理", loginRequired: true, adminRequired: true },
         },
         {
+          path: "/admin/operation-logs",
+          name: "admin-operation-logs",
+          component: () => import("@/views/AdminOperationLogView.vue"),
+          meta: {
+            title: "操作日志",
+            loginRequired: true,
+            adminRequired: true,
+          },
+        },
+        {
           path: "/:from/:username",
           name: "user-profile-from",
           component: () => import("@/views/UserProfileView.vue"),

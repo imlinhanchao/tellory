@@ -52,12 +52,14 @@ export class PlayController {
   @UseGuards(JwtAuthGuard, AdminGuard)
   @Get('admin/list')
   async adminList(
+    @Query('page') page?: number,
     @Query('limit') limit?: number,
     @Query('createdAt') createdAt?: number,
     @Query('storyId') storyId?: string,
     @Query('userId') userId?: string,
   ) {
     return this.playService.listForAdmin({
+      page,
       limit,
       createdAt,
       storyId,

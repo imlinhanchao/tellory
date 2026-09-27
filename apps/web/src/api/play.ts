@@ -107,12 +107,19 @@ export interface IAdminPlayDetail extends IAdminPlayRow {
 }
 
 export const adminListPlays = (params: {
+  page?: number;
   limit?: number;
   createdAt?: number;
   storyId?: string;
   userId?: string;
 } = {}) => {
-  return request.get<{ data: IAdminPlayRow[]; total: number }>({
+  return request.get<{
+    data: IAdminPlayRow[];
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  }>({
     url: '/play/admin/list',
     params,
   });

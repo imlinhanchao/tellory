@@ -54,7 +54,11 @@
 
           <label class="form-control">
             <span class="label-text text-xs text-base-content/60 mb-1">列表数量</span>
-            <select v-model.number="filters.limit" class="select select-bordered select-sm">
+            <select
+              v-model.number="filters.limit"
+              class="select select-bordered select-sm"
+              @change="handleSearch"
+            >
               <option :value="20">20</option>
               <option :value="50">50</option>
               <option :value="100">100</option>
@@ -62,7 +66,7 @@
           </label>
 
           <div class="flex items-end gap-2">
-            <button type="button" class="btn btn-primary btn-sm flex-1" :disabled="loading" @click="loadList">
+            <button type="button" class="btn btn-primary btn-sm flex-1" :disabled="loading" @click="handleSearch">
               <Icon icon="mdi:magnify" class="w-4 h-4" />
               查询
             </button>
@@ -133,6 +137,36 @@
 
       <div v-if="!loading && rows.length === 0" class="p-8 text-center text-base-content/60 text-sm">
         暂无游玩记录
+      </div>
+    </div>
+
+    <div
+      v-if="totalPages > 1"
+      class="flex items-center justify-between gap-4 bg-base-100 p-3 sm:p-4 rounded-xl border border-base-200/80 text-xs"
+    >
+      <div class="text-base-content/60">
+        第 <span class="font-medium text-base-content">{{ page }}</span> / {{ totalPages }} 页
+      </div>
+      <div class="join">
+        <button
+          type="button"
+          class="join-item btn btn-sm"
+          :disabled="page <= 1 || loading"
+          @click="changePage(page - 1)"
+        >
+          上一页
+        </button>
+        <button type="button" class="join-item btn btn-sm btn-active" disabled>
+          {{ page }}
+        </button>
+        <button
+          type="button"
+          class="join-item btn btn-sm"
+          :disabled="page >= totalPages || loading"
+          @click="changePage(page + 1)"
+        >
+          下一页
+        </button>
       </div>
     </div>
 
@@ -234,6 +268,8 @@ import {
 
 const rows = ref<IAdminPlayRow[]>([]);
 const total = ref(0);
+const page = ref(1);
+const totalPages = ref(1);
 const loading = ref(false);
 const detailLoading = ref(false);
 const detail = ref<IAdminPlayDetail | null>(null);
@@ -245,21 +281,29 @@ const filters = reactive({
   userId: "",
 });
 
-const loadList = async () => {
+const loadList = async (targetPage = page.value) => {
   loading.value = true;
   try {
     const res = await adminListPlays({
+      page: targetPage,
       limit: filters.limit,
       storyId: filters.storyId || '',
       userId: filters.userId || '',
     });
     rows.value = res?.data || [];
     total.value = res?.total || 0;
+    page.value = res?.page || targetPage;
+    totalPages.value = res?.totalPages || Math.max(1, Math.ceil(total.value / filters.limit));
   } catch (err: any) {
     Message.error(err?.message || "加载游玩数据失败");
   } finally {
     loading.value = false;
   }
+};
+
+const handleSearch = async () => {
+  page.value = 1;
+  await loadList(1);
 };
 
 const openDetail = async (playId: string) => {
@@ -278,10 +322,20 @@ const openDetail = async (playId: string) => {
 };
 
 const resetFilters = async () => {
+  page.value = 1;
+  totalPages.value = 1;
   filters.limit = 20;
   filters.storyId = "";
   filters.userId = "";
-  await loadList();
+  await loadList(1);
+};
+
+const changePage = async (nextPage: number) => {
+  if (nextPage < 1 || nextPage > totalPages.value || nextPage === page.value) {
+    return;
+  }
+  await loadList(nextPage);
+  window.scrollTo({ top: 0, behavior: "smooth" });
 };
 
 const formatTime = (ts?: number) => {

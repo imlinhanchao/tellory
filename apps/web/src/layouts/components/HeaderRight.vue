@@ -267,6 +267,12 @@
             游玩管理
           </router-link>
         </li>
+        <li v-if="authStore.isAdmin">
+          <router-link to="/admin/operation-logs">
+            <Icon icon="mdi:text-box-search-outline" class="w-4 h-4" />
+            操作日志
+          </router-link>
+        </li>
         <span class="divider my-0"></span>
         <li>
           <a class="text-error" @click.prevent="handleLogout">
