@@ -128,6 +128,18 @@
                   <button type="button" class="btn btn-xs btn-primary" @click="openDetail(item.id)">
                     查看详情
                   </button>
+                  <button
+                    type="button"
+                    class="btn btn-xs btn-ghost text-error hover:bg-error/10"
+                    :disabled="deletingId === item.id"
+                    @click="handleDelete(item)"
+                  >
+                    <span
+                      v-if="deletingId === item.id"
+                      class="loading loading-spinner loading-xs"
+                    ></span>
+                    删除
+                  </button>
                 </div>
               </td>
             </tr>
@@ -258,8 +270,10 @@
 import { reactive, ref, onMounted } from "vue";
 import { Icon } from "@iconify/vue";
 import Message from "@/components/msg";
+import msgbox from "@/components/msgbox";
 import { serializeStory, type StoryData } from "@/lib/storyEngine";
 import {
+  adminDeletePlay,
   adminGetPlayDetail,
   adminListPlays,
   type IAdminPlayDetail,
@@ -274,6 +288,7 @@ const loading = ref(false);
 const detailLoading = ref(false);
 const detail = ref<IAdminPlayDetail | null>(null);
 const detailDialogRef = ref<HTMLDialogElement | null>(null);
+const deletingId = ref("");
 
 const filters = reactive({
   limit: 20,
@@ -328,6 +343,30 @@ const resetFilters = async () => {
   filters.storyId = "";
   filters.userId = "";
   await loadList(1);
+};
+
+const handleDelete = async (item: IAdminPlayRow) => {
+  const storyName = item.story?.title || item.storyId;
+  const userName =
+    item.user?.nickname || item.user?.username || item.userId || "匿名用户";
+  const confirmed = await msgbox.confirm(
+    `确定要删除这条游玩记录吗？此操作不可恢复。\n故事：${storyName}\n用户：${userName}`,
+  );
+  if (!confirmed) return;
+  deletingId.value = item.id;
+  try {
+    await adminDeletePlay(item.id);
+    Message.success("已删除该游玩记录");
+    // 当前页被删空则回退一页
+    if (rows.value.length === 1 && page.value > 1) {
+      page.value -= 1;
+    }
+    await loadList();
+  } catch (err: any) {
+    Message.error(err?.message || "删除失败");
+  } finally {
+    deletingId.value = "";
+  }
 };
 
 const changePage = async (nextPage: number) => {

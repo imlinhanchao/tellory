@@ -95,6 +95,17 @@ export class PlayController {
     };
   }
 
+  @UseGuards(JwtAuthGuard, AdminGuard)
+  @Delete('admin/:playId')
+  async adminRemove(@Param('playId') playId: string) {
+    const play = await this.playService.findOne(playId);
+    if (!play) {
+      throw new Error('游玩记录不存在');
+    }
+    await this.playService.remove(playId);
+    return { ok: true };
+  }
+
   @Get('story/:id')
   @UseGuards(JwtAuthGuard)
   async getApprovedStory(@Param('id') id: string) {

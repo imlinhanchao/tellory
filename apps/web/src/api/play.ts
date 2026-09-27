@@ -130,3 +130,9 @@ export const adminGetPlayDetail = (playId: string) => {
     url: `/play/admin/${playId}`,
   });
 };
+
+export const adminDeletePlay = (playId: string) => {
+  return request.delete<{ ok: boolean }>({
+    url: `/play/admin/${playId}`,
+  });
+};
