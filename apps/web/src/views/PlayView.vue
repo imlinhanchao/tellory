@@ -25,6 +25,23 @@
 
         <div class="flex items-center gap-1">
           <button
+            v-if="canLike"
+            class="btn btn-ghost btn-xs gap-1"
+            :class="liked ? 'text-error' : 'hover:text-base-content'"
+            :disabled="liked || liking"
+            :title="liked ? '已喜爱（不可撤回）' : '喜爱这个故事'"
+            @click="handleLike"
+          >
+            <span v-if="liking" class="loading loading-spinner loading-xs"></span>
+            <Icon
+              v-else
+              :icon="liked ? 'mdi:heart' : 'mdi:heart-outline'"
+              class="size-3.5"
+            />
+            <span>{{ liked ? "已喜爱" : "喜爱" }}</span>
+            <span v-if="likeCount > 0" class="opacity-70">{{ likeCount }}</span>
+          </button>
+          <button
             v-if="canUndo"
             class="btn btn-ghost btn-xs gap-1 hover:text-base-content"
             title="撤销上一步"
@@ -794,7 +811,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch, computed, nextTick } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { getStory } from "@/api/stories";
+import { getStory, likeStory } from "@/api/stories";
 import {
   createPlay,
   getPlay,
@@ -845,6 +862,12 @@ const unlockedEnding = ref<IEndingUnlock | null>(null);
 const isEnding = ref(false);
 const sceneRenderKey = ref(0);
 const undoing = ref(false);
+
+// 喜爱故事（仅正式阅读页可操作，不可撤回）
+const likeCount = ref(0);
+const liked = ref(false);
+const liking = ref(false);
+const canLike = computed(() => route.name === "play");
 
 // 故事更新检测与关闭状态（按更新时间戳记录，关闭后直到下次更新才再次提醒）
 const dismissedUpdateVersion = ref<number>(0);
@@ -1046,9 +1069,28 @@ async function loadStory() {
   );
   story.value = res as any;
   storyId.value = story.value?.sourceStoryId || story.value?.id;
+  // 喜爱状态（正式阅读页由接口返回）
+  likeCount.value = Number(story.value?.likeCount) || 0;
+  liked.value = !!story.value?.liked;
   if (story.value?.title) {
     appStore.setCustomHeaderTitle(story.value.title);
     document.title = story.value.title + " | 织言 - Tellory";
+  }
+}
+
+/** 喜爱故事（不可撤回；已喜爱后不可再点击） */
+async function handleLike() {
+  if (!canLike.value || liked.value || liking.value) return;
+  liking.value = true;
+  try {
+    const res = await likeStory(storyId.value);
+    liked.value = true;
+    likeCount.value = res?.likeCount ?? likeCount.value + 1;
+    Message.success("已加入喜爱，可在个人主页查看");
+  } catch {
+    // 错误提示由 http 层统一处理
+  } finally {
+    liking.value = false;
   }
 }
 

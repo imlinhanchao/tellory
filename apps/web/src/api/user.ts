@@ -43,3 +43,21 @@ export function completeTour(isToured = true) {
 export function getUser(username: string) {
   return request.get<UserProfile>({ url: `/users/${username}` });
 }
+
+export interface UserSummary {
+  id: string;
+  username: string;
+  nickname?: string;
+  avatar?: string;
+  from?: string;
+}
+
+/**
+ * 按昵称/用户名搜索用户（需登录，用于添加内测用户等场景）
+ */
+export function searchUsers(keyword: string) {
+  return request.get<UserSummary[]>({
+    url: "/users/search",
+    params: { keyword },
+  });
+}

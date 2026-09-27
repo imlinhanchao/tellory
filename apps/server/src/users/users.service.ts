@@ -223,4 +223,16 @@ export class UsersService {
     await this.usersRepository.update({ id: user.id }, user);
     return user;
   }
+
+  async search(keyword: string): Promise<User[]> {
+    const q = (keyword || '').trim();
+    if (!q) return [];
+    return this.usersRepository
+      .createQueryBuilder('user')
+      .where('user.username LIKE :keyword OR user.nickname LIKE :keyword', {
+        keyword: `%${q}%`,
+      })
+      .take(10)
+      .getMany();
+  }
 }

@@ -8,7 +8,12 @@ import {
 } from 'typeorm';
 
 export type NotificationType =
-  'comment_story' | 'comment_reply' | 'story_update' | 'story_approved';
+  | 'comment_story'
+  | 'comment_reply'
+  | 'story_update'
+  | 'story_approved'
+  | 'beta_invited'
+  | 'beta_story_published';
 
 @Entity({ name: 'notifications', comment: '站内消息通知表' })
 @Index(['userId', 'isRead'])
@@ -25,7 +30,7 @@ export class Notification {
     type: 'varchar',
     length: 50,
     comment:
-      '通知类型: comment_story, comment_reply, story_update, story_approved',
+      '通知类型: comment_story, comment_reply, story_update, story_approved, beta_invited, beta_story_published',
   })
   type: NotificationType;
 

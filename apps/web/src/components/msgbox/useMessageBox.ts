@@ -18,34 +18,46 @@ function mountBox<T = boolean>(options: MsgBoxOptions): Promise<T | false> {
   document.body.appendChild(container);
 
   return new Promise((resolve) => {
-    const app = createApp(MessageBox, {
+    let settled = false;
+    let closed = false;
+    let app: ReturnType<typeof createApp> | null = null;
+
+    function close() {
+      if (closed) return;
+      closed = true;
+      try {
+        app?.unmount();
+      } catch (e) {
+        // ignore
+      }
+      if (container.parentNode) {
+        container.parentNode.removeChild(container);
+      }
+    }
+
+    function safeResolve(val: T | false) {
+      if (settled) return;
+      settled = true;
+      resolve(val);
+      close();
+    }
+
+    app = createApp(MessageBox, {
       ...options,
       visible: true,
       onConfirm: (val: any) => {
         // 接收组件 emit 出来的值
-        resolve(val);
-        close();
+        safeResolve(val);
       },
       onCancel: () => {
-        resolve(false);
-        close();
+        safeResolve(false);
       },
       onClose: () => {
-        resolve(false);
-        close();
+        safeResolve(false);
       },
     });
 
     app.mount(container);
-
-    function close() {
-      try {
-        app.unmount();
-      } catch (e) {
-        // ignore
-      }
-      if (container.parentNode) container.parentNode.removeChild(container);
-    }
   });
 }
 

@@ -4,7 +4,9 @@ export type NotificationType =
   | "comment_story"
   | "comment_reply"
   | "story_update"
-  | "story_approved";
+  | "story_approved"
+  | "beta_invited"
+  | "beta_story_published";
 
 export interface NotificationSender {
   id: string;

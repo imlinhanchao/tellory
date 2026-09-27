@@ -41,6 +41,141 @@
         </dialog>
       </div>
 
+      <!-- 内测用户管理弹窗 -->
+      <Teleport to="body">
+        <dialog ref="betaDialogRef" class="modal" @close="resetBetaDialog">
+          <div class="modal-box max-w-xl">
+            <h3 class="flex items-center gap-2 text-lg font-bold">
+              <Icon
+                icon="mdi:account-group-outline"
+                class="text-xl text-primary"
+              />
+              内测用户管理
+            </h3>
+            <p class="pt-1 text-sm text-base-content/60">
+              内测用户可通过试玩链接查看本故事尚未发布的内容。
+            </p>
+
+            <!-- 搜索添加（autocomplete） -->
+            <label
+              class="input input-bordered mt-4 flex w-full items-center gap-2"
+            >
+              <Icon icon="mdi:magnify" class="text-base opacity-50" />
+              <input
+                v-model="betaQuery"
+                type="text"
+                class="grow"
+                placeholder="输入昵称 / 用户名搜索用户…"
+                @input="onBetaQueryInput"
+                @keydown.enter.prevent="addFirstBetaResult"
+              />
+              <span
+                v-if="betaSearching"
+                class="loading loading-spinner loading-xs"
+              ></span>
+            </label>
+            <ul
+              v-if="betaQuery.trim()"
+              class="mt-1 max-h-56 overflow-y-auto rounded-box border border-base-300 bg-base-100 shadow-sm"
+            >
+              <li v-for="user in betaResults" :key="user.id">
+                <button
+                  type="button"
+                  class="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-base-200 disabled:opacity-60"
+                  :disabled="betaAdding !== null"
+                  @click="confirmAddBetaTester(user)"
+                >
+                  <Avatar :user="user" size="28" shrink />
+                  <span class="min-w-0 flex-1 truncate text-sm">
+                    <span class="font-medium">{{ user.nickname }}</span>
+                    <span class="ml-1 text-xs text-base-content/50"
+                      >@{{ user.username }}</span
+                    >
+                  </span>
+                  <span
+                    v-if="betaAdding === user.id"
+                    class="loading loading-spinner loading-xs"
+                  ></span>
+                  <Icon
+                    v-else
+                    icon="mdi:account-plus-outline"
+                    class="text-lg text-primary"
+                  />
+                </button>
+              </li>
+              <li
+                v-if="!betaSearching && betaResults.length === 0"
+                class="px-3 py-4 text-center text-sm text-base-content/50"
+              >
+                没有找到匹配的用户
+              </li>
+            </ul>
+
+            <!-- 已有内测用户 -->
+            <div class="mt-5">
+              <div class="mb-1 flex items-center gap-2">
+                <span class="text-sm font-medium">已有内测用户</span>
+                <span
+                  v-if="betaTesters.length"
+                  class="badge badge-ghost badge-sm"
+                  >{{ betaTesters.length }}</span
+                >
+              </div>
+              <div v-if="betaLoading" class="flex justify-center py-6">
+                <span
+                  class="loading loading-spinner loading-md text-primary"
+                ></span>
+              </div>
+              <ul
+                v-else-if="betaTesters.length"
+                class="max-h-56 divide-y divide-base-200 overflow-y-auto rounded-box border border-base-300"
+              >
+                <li
+                  v-for="tester in betaTesters"
+                  :key="tester.id"
+                  class="flex items-center gap-2 px-3 py-2"
+                >
+                  <Avatar :user="tester" size="28" shrink />
+                  <span class="min-w-0 flex-1 truncate text-sm">
+                    <span class="font-medium">{{ tester.nickname }}</span>
+                    <span class="ml-1 text-xs text-base-content/50"
+                      >@{{ tester.username }}</span
+                    >
+                  </span>
+                  <button
+                    type="button"
+                    class="btn btn-ghost btn-xs"
+                    :disabled="betaRemoving !== null"
+                    @click="confirmRemoveBetaTester(tester)"
+                  >
+                    <span
+                      v-if="betaRemoving === tester.id"
+                      class="loading loading-spinner loading-xs"
+                    ></span>
+                    <Icon v-else icon="mdi:close" class="text-sm" />
+                    移除
+                  </button>
+                </li>
+              </ul>
+              <p
+                v-else
+                class="rounded-box border border-dashed border-base-300 px-3 py-6 text-center text-sm text-base-content/50"
+              >
+                还没有内测用户。搜索昵称或用户名，添加后对方即可通过试玩链接访问。
+              </p>
+            </div>
+
+            <div class="modal-action">
+              <form method="dialog">
+                <button class="btn">关闭</button>
+              </form>
+            </div>
+          </div>
+          <form method="dialog" class="modal-backdrop">
+            <button type="submit">close</button>
+          </form>
+        </dialog>
+      </Teleport>
       <main
         class="rounded-2xl border border-base-300 bg-base-100 md:p-4 shadow-sm w-full"
       >
@@ -152,6 +287,20 @@
                   @click="openGraph"
                 >
                   <Icon icon="mdi:graph-outline" size="16px" />
+                </button>
+              </div>
+              <div
+                v-if="currentStoryId && !props.readOnly"
+                class="tooltip tooltip-bottom"
+                data-tip="内测用户管理"
+                data-tour="btn-beta"
+              >
+                <button
+                  class="btn btn-sm btn-ghost btn-square"
+                  type="button"
+                  @click="openBetaDialog"
+                >
+                  <Icon icon="mdi:account-group-outline" size="16px" />
                 </button>
               </div>
               <div
@@ -557,9 +706,9 @@
 </template>
 <script setup lang="ts">
 import {
+  ref,
   computed,
   onMounted,
-  ref,
   nextTick,
   onBeforeUnmount,
   watch,
@@ -570,9 +719,13 @@ import {
   createStory,
   updateStory,
   publishStory,
+  listBetaTesters,
+  addBetaTester,
+  removeBetaTester,
   IStory,
+  type IStoryBetaTester,
 } from "@/api/stories";
-import { completeTour } from "@/api/user";
+import { completeTour, searchUsers, type UserSummary } from "@/api/user";
 import StoryPlayView from "@/views/StoryPlayView.vue";
 import StoryEditorPanel from "@/components/StoryEditor/StoryEditorPanel.vue";
 import StoryRightPanel from "@/components/StoryEditor/StoryRightPanel.vue";
@@ -612,6 +765,7 @@ import useStoryDraft, {
   storyFingerprint,
 } from "@/composables/useStoryDraft";
 import Icon from "@/components/Icon/src/Icon.vue";
+import Avatar from "@/components/Avatar/src/Avatar.vue";
 import Tour from "@/components/Tour/src/Tour.vue";
 import type { TourStep } from "@/components/Tour/src/types";
 import { availableTourSteps } from "@/lib/editorTour";
@@ -903,6 +1057,10 @@ onBeforeUnmount(() => {
       cmPasteInstance.toTextArea();
     } catch {}
     cmPasteInstance = null;
+  }
+  if (betaSearchTimer !== null) {
+    window.clearTimeout(betaSearchTimer);
+    betaSearchTimer = null;
   }
   if (globalKeydownHandler) {
     try {
@@ -1373,6 +1531,131 @@ const openPassageFromGraph = (name: string) => {
   selectPassage(name);
   graphRef.value?.close();
 };
+
+/* ---------------------------- 内测用户管理 ---------------------------- */
+const betaDialogRef = ref<HTMLDialogElement | null>(null);
+const betaTesters = ref<IStoryBetaTester[]>([]);
+const betaLoading = ref(false);
+const betaQuery = ref("");
+const betaSearching = ref(false);
+const betaResults = ref<UserSummary[]>([]);
+const betaAdding = ref<string | null>(null);
+const betaRemoving = ref<string | null>(null);
+let betaSearchTimer: number | null = null;
+let betaSearchSeq = 0;
+
+/** 打开内测用户管理弹窗（仅作者可见） */
+async function openBetaDialog() {
+  if (!currentStoryId.value) return;
+  betaDialogRef.value?.showModal();
+  await loadBetaTesters();
+}
+
+/** 加载已有内测用户列表 */
+async function loadBetaTesters() {
+  if (!currentStoryId.value) return;
+  betaLoading.value = true;
+  try {
+    betaTesters.value = await listBetaTesters(currentStoryId.value);
+  } catch (e) {
+    console.error("[StoryEditor] load beta testers failed", e);
+  } finally {
+    betaLoading.value = false;
+  }
+}
+
+/** 搜索输入防抖：停止输入 300ms 后再发起搜索 */
+function onBetaQueryInput() {
+  if (betaSearchTimer !== null) {
+    window.clearTimeout(betaSearchTimer);
+  }
+  const keyword = betaQuery.value.trim();
+  if (!keyword) {
+    betaSearchSeq += 1; // 让在途请求的结果失效
+    betaResults.value = [];
+    betaSearching.value = false;
+    return;
+  }
+  betaSearchTimer = window.setTimeout(() => void searchBetaUsers(), 300);
+}
+
+async function searchBetaUsers() {
+  const keyword = betaQuery.value.trim();
+  if (!keyword) return;
+  const seq = ++betaSearchSeq;
+  betaSearching.value = true;
+  try {
+    const users = await searchUsers(keyword);
+    if (seq !== betaSearchSeq) return; // 只采纳最新一次搜索的结果
+    const testerIds = new Set(betaTesters.value.map((t) => t.id));
+    betaResults.value = users.filter((u) => !testerIds.has(u.id));
+  } catch (e) {
+    if (seq === betaSearchSeq) betaResults.value = [];
+    console.error("[StoryEditor] search users failed", e);
+  } finally {
+    if (seq === betaSearchSeq) betaSearching.value = false;
+  }
+}
+
+/** 回车：直接添加第一个搜索结果 */
+function addFirstBetaResult() {
+  const first = betaResults.value[0];
+  if (first) void confirmAddBetaTester(first);
+}
+
+async function confirmAddBetaTester(user: UserSummary) {
+  if (!currentStoryId.value || betaAdding.value) return;
+  betaAdding.value = user.id;
+  try {
+    await addBetaTester(currentStoryId.value, user.id);
+    msg.success(`已添加内测用户「${user.nickname || user.username}」`);
+    // 添加成功后清空搜索，随即刷新已有内测用户列表
+    betaQuery.value = "";
+    betaResults.value = [];
+    await loadBetaTesters();
+  } catch (e) {
+    // 失败提示由 http 层统一处理
+    console.error("[StoryEditor] add beta tester failed", e);
+  } finally {
+    betaAdding.value = null;
+  }
+}
+
+async function confirmRemoveBetaTester(tester: IStoryBetaTester) {
+  if (!currentStoryId.value || betaRemoving.value) return;
+  const name = tester.nickname || tester.username;
+  const confirmed = await msgbox.confirm(
+    `确定将「${name}」从内测用户中移除吗？移除后对方将无法再访问未发布的内容。`,
+    "移除内测用户",
+    { confirmText: "移除", cancelText: "取消" },
+  );
+  if (!confirmed) return;
+  betaRemoving.value = tester.id;
+  try {
+    await removeBetaTester(currentStoryId.value, tester.id);
+    betaTesters.value = betaTesters.value.filter((t) => t.id !== tester.id);
+    msg.success(`已移除内测用户「${name}」`);
+  } catch (e) {
+    console.error("[StoryEditor] remove beta tester failed", e);
+  } finally {
+    betaRemoving.value = null;
+  }
+}
+
+/** 弹窗关闭后重置搜索状态，避免下次打开残留旧结果 */
+function resetBetaDialog() {
+  if (betaSearchTimer !== null) {
+    window.clearTimeout(betaSearchTimer);
+    betaSearchTimer = null;
+  }
+  betaSearchSeq += 1;
+  betaQuery.value = "";
+  betaResults.value = [];
+  betaSearching.value = false;
+  betaAdding.value = null;
+  betaRemoving.value = null;
+  betaTesters.value = [];
+}
 
 // keep tag editor sync with selected passage
 watch(selectedPassage, () => {

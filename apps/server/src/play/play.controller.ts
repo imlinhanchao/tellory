@@ -108,12 +108,17 @@ export class PlayController {
 
   @Get('story/:id')
   @UseGuards(JwtAuthGuard)
-  async getApprovedStory(@Param('id') id: string) {
+  async getApprovedStory(@Param('id') id: string, @Request() req) {
     const p = await this.storiesService.findApprovedOne(id);
     if (!p) {
       throw new Error('故事不存在');
     }
-    return p;
+    // 附加喜爱状态（阅读页展示喜爱按钮）
+    const likeState = await this.storiesService.getStoryLikeState(
+      p.sourceStoryId || id,
+      req.user?.userId,
+    );
+    return { ...p, ...likeState };
   }
 
   @UseGuards(JwtAuthGuard)

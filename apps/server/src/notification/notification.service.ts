@@ -174,6 +174,8 @@ export class NotificationService {
     shortname?: string;
     authorId?: string;
     keys: string[];
+    /** 排除的用户（如内测用户，他们改收上架通知） */
+    excludeUserIds?: string[];
   }): Promise<number> {
     try {
       const { storyId, storyTitle, shortname, authorId, keys } = params;
@@ -190,9 +192,10 @@ export class NotificationService {
         .distinct(true)
         .getRawMany();
 
+      const excluded = new Set((params.excludeUserIds || []).filter(Boolean));
       const userIds = activeRows
         .map((r) => r.userId)
-        .filter((uid) => uid && uid !== authorId);
+        .filter((uid) => uid && uid !== authorId && !excluded.has(uid));
 
       const uniqueUserIds = Array.from(new Set(userIds));
       if (uniqueUserIds.length === 0) return 0;
@@ -246,6 +249,73 @@ export class NotificationService {
         shortname,
       },
     });
+  }
+
+  /**
+   * 5. 被添加为故事内测用户
+   */
+  async notifyBetaTesterAdded(params: {
+    userId: string;
+    authorId?: string;
+    storyId: string;
+    storyTitle: string;
+    shortname?: string;
+  }): Promise<Notification | null> {
+    const { userId, authorId, storyId, storyTitle, shortname } = params;
+    // 不给自己发送通知
+    if (!userId || userId === authorId) return null;
+
+    return this.create({
+      userId,
+      senderId: authorId,
+      type: 'beta_invited',
+      title: '内测邀请',
+      content: `你已成为故事《${storyTitle}》的内测用户，可以在上架前提前体验，快去「内测故事」看看吧！`,
+      storyId,
+      extra: {
+        storyTitle,
+        shortname,
+      },
+    });
+  }
+
+  /**
+   * 6. 内测的故事上架了
+   */
+  async notifyBetaStoryPublished(params: {
+    userIds: string[];
+    storyId: string;
+    storyTitle: string;
+    shortname?: string;
+  }): Promise<number> {
+    try {
+      const { userIds, storyId, storyTitle, shortname } = params;
+      const uniqueUserIds = Array.from(
+        new Set((userIds || []).filter(Boolean)),
+      );
+      if (uniqueUserIds.length === 0) return 0;
+
+      const notifications = uniqueUserIds.map((userId) =>
+        this.notificationRepo.create({
+          userId,
+          type: 'beta_story_published',
+          title: '内测故事已上架',
+          content: `你参与内测的故事《${storyTitle}》已正式上架，快去看看吧！`,
+          storyId,
+          extra: {
+            storyTitle,
+            shortname,
+          },
+          isRead: false,
+        }),
+      );
+
+      await this.notificationRepo.save(notifications);
+      return notifications.length;
+    } catch (e) {
+      console.error('发送内测故事上架通知失败:', e);
+      return 0;
+    }
   }
 
   /**

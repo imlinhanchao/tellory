@@ -1,16 +1,25 @@
-import { Injectable, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Like, LessThanOrEqual, In } from 'typeorm';
+import { Repository, Like, LessThanOrEqual, In, Brackets } from 'typeorm';
+import { User } from 'src/users/user.entity';
 import { UsersService } from 'src/users/users.service';
 import { Story } from './story.entity';
 import { ApprovedStory } from './approved-story.entity';
 import { StoryHistory } from './story-history.entity';
+import { StoryLike } from './story-like.entity';
+import { Play } from '../play/play.entity';
+import { Comment } from '../comment/comment.entity';
 import { StoryDto } from './stories.dto';
 import { omit } from 'src/utils';
 import { FingerTo } from 'fishpi';
 import { ConfigService } from 'src/config/config.service';
 import { isMailConfigured, sendStoryApprovedMail } from '../lib/mail';
 import { NotificationService } from 'src/notification/notification.service';
+import { StoryBetaTester } from './story-beta-tester.entity';
 
 type PublicStory = {
   id: string;
@@ -25,6 +34,21 @@ type PublicStory = {
   createdAt?: number;
   updatedAt?: number;
   status?: string;
+  playCount?: number;
+  commentCount?: number;
+  likeCount?: number;
+  liked?: boolean;
+};
+
+/** 公开列表排序方式：latest=最新，hot=热度（阅读数+评论数），liked=喜爱度（喜爱个数） */
+export type StorySort = 'latest' | 'hot' | 'liked';
+
+/** 故事公开统计信息 */
+type StoryStat = {
+  playCount: number;
+  commentCount: number;
+  likeCount: number;
+  liked: boolean;
 };
 
 @Injectable()
@@ -36,6 +60,14 @@ export class StoriesService {
     private approvedRepo: Repository<ApprovedStory>,
     @InjectRepository(StoryHistory)
     private storyHistoryRepo: Repository<StoryHistory>,
+    @InjectRepository(StoryLike)
+    private storyLikeRepo: Repository<StoryLike>,
+    @InjectRepository(StoryBetaTester)
+    private storyBetaTesterRepo: Repository<StoryBetaTester>,
+    @InjectRepository(Play)
+    private playRepo: Repository<Play>,
+    @InjectRepository(Comment)
+    private commentRepo: Repository<Comment>,
     private readonly usersService: UsersService,
     private readonly notificationService: NotificationService,
   ) {}
@@ -131,40 +163,68 @@ export class StoriesService {
     search?: string,
     isPublicRequest = true,
     isAdmin = false,
+    sort: StorySort = 'latest',
+    page = 1,
+    viewerId?: string,
   ) {
     if (isPublicRequest) {
-      const where = this.buildWhereForApproved(
-        createdAt,
-        authorId,
-        search,
-        isAdmin,
-      );
-      const [rows, total] = await this.approvedRepo.findAndCount({
-        where,
-        order: { approvedAt: 'DESC' },
-        take: limit,
-      });
+      const take = Math.max(1, Math.min(Number(limit) || 20, 100));
+      let rows: ApprovedStory[];
+      let total: number;
 
+      if (sort === 'latest') {
+        const where = this.buildWhereForApproved(
+          createdAt,
+          authorId,
+          search,
+          isAdmin,
+        );
+        [rows, total] = await this.approvedRepo.findAndCount({
+          where,
+          order: { approvedAt: 'DESC' },
+          take,
+        });
+      } else {
+        // 热度 / 喜爱度排序：使用偏移分页 + 子查询分数排序
+        const p = Math.max(1, Number(page) || 1);
+        const qb = this.approvedRepo.createQueryBuilder('s');
+        if (!isAdmin) {
+          qb.andWhere('s.isUnpublished = :unpub', { unpub: false });
+        }
+        if (authorId) {
+          qb.andWhere('s.authorId = :authorId', { authorId });
+        }
+        if (search) {
+          const like = `%${search}%`;
+          qb.andWhere(
+            new Brackets((w) => {
+              w.where('s.title LIKE :like', { like }).orWhere(
+                's.description LIKE :like',
+                { like },
+              );
+            }),
+          );
+        }
+        const scoreSql = this.buildStoryScoreSql(sort);
+        qb.addSelect(scoreSql, 'story_score')
+          .orderBy('story_score', 'DESC')
+          .addOrderBy('s.approvedAt', 'DESC')
+          .skip((p - 1) * take)
+          .take(take);
+        [rows, total] = await qb.getManyAndCount();
+      }
+
+      const stats = await this.getStoryStats(
+        rows.map((r) => r.sourceStoryId),
+        viewerId,
+      );
       const authorIds = rows.map((r) => r.authorId).filter(Boolean);
       const authors = await this.usersService.getUsers(authorIds);
 
       const data = rows.map((r) => {
-        const tags = r.tags ? String(r.tags).split(',') : [];
-        const mapped: PublicStory = {
-          id: r.sourceStoryId,
-          title: r.title,
-          description: r.description,
-          shortname: r.shortname,
-          content: r.content,
-          passageSize: r.passageSize || 0,
-          tags,
-          authorId: r.authorId,
-          author: authors.find((a) => a.id === r.authorId) || null,
-          createdAt: r.approvedAt,
-          updatedAt: r.approvedAt,
-          status: r.isUnpublished ? 'unpublished' : 'published',
-        };
-        return mapped;
+        const stat = stats.get(r.sourceStoryId) || this.emptyStat();
+        const author = authors.find((a) => a.id === r.authorId) || null;
+        return this.toPublicStory(r, author, stat);
       });
 
       return { data, total };
@@ -186,6 +246,228 @@ export class StoriesService {
       })),
       total,
     };
+  }
+
+  private emptyStat(): StoryStat {
+    return { playCount: 0, commentCount: 0, likeCount: 0, liked: false };
+  }
+
+  /**
+   * 生成排序分数子查询；表名从实体元数据获取以兼容 entityPrefix 前缀配置。
+   * hot = 阅读数（去重玩家）+ 评论数；liked = 喜爱数。
+   */
+  private buildStoryScoreSql(sort: StorySort): string {
+    if (sort === 'hot') {
+      const playTable = this.playRepo.metadata.tablePath;
+      const commentTable = this.commentRepo.metadata.tablePath;
+      return `((SELECT COUNT(DISTINCT p.userId) FROM \`${playTable}\` p WHERE p.storyId = s.sourceStoryId) + (SELECT COUNT(*) FROM \`${commentTable}\` c WHERE c.storyId = s.sourceStoryId AND c.isDeleted = 0 AND c.isBlocked = 0))`;
+    }
+    const likeTable = this.storyLikeRepo.metadata.tablePath;
+    return `(SELECT COUNT(*) FROM \`${likeTable}\` sl WHERE sl.storyId = s.sourceStoryId)`;
+  }
+
+  private toPublicStory(
+    row: ApprovedStory,
+    author: any,
+    stat: StoryStat,
+  ): PublicStory {
+    return {
+      id: row.sourceStoryId,
+      title: row.title,
+      description: row.description,
+      shortname: row.shortname,
+      content: row.content,
+      passageSize: row.passageSize || 0,
+      tags: row.tags ? String(row.tags).split(',') : [],
+      authorId: row.authorId,
+      author: author || null,
+      createdAt: row.approvedAt,
+      updatedAt: row.approvedAt,
+      status: row.isUnpublished ? 'unpublished' : 'published',
+      playCount: stat.playCount,
+      commentCount: stat.commentCount,
+      likeCount: stat.likeCount,
+      liked: stat.liked,
+    };
+  }
+
+  /** 批量统计故事的阅读（去重玩家）、评论、喜爱数，并标记指定用户是否已喜爱 */
+  private async getStoryStats(
+    storyIds: string[],
+    viewerId?: string,
+  ): Promise<Map<string, StoryStat>> {
+    const result = new Map<string, StoryStat>();
+    const ids = Array.from(new Set(storyIds.filter(Boolean)));
+    if (!ids.length) return result;
+    for (const id of ids) {
+      result.set(id, this.emptyStat());
+    }
+
+    const playRows = await this.playRepo
+      .createQueryBuilder('p')
+      .select('p.storyId', 'storyId')
+      .addSelect('COUNT(DISTINCT p.userId)', 'cnt')
+      .where('p.storyId IN (:...ids)', { ids })
+      .groupBy('p.storyId')
+      .getRawMany();
+    for (const row of playRows) {
+      const stat = result.get(row.storyId);
+      if (stat) stat.playCount = Number(row.cnt) || 0;
+    }
+
+    const commentRows = await this.commentRepo
+      .createQueryBuilder('c')
+      .select('c.storyId', 'storyId')
+      .addSelect('COUNT(*)', 'cnt')
+      .where('c.storyId IN (:...ids)', { ids })
+      .andWhere('c.isDeleted = :del', { del: false })
+      .andWhere('c.isBlocked = :blk', { blk: false })
+      .groupBy('c.storyId')
+      .getRawMany();
+    for (const row of commentRows) {
+      const stat = result.get(row.storyId);
+      if (stat) stat.commentCount = Number(row.cnt) || 0;
+    }
+
+    const likeRows = await this.storyLikeRepo
+      .createQueryBuilder('sl')
+      .select('sl.storyId', 'storyId')
+      .addSelect('COUNT(*)', 'cnt')
+      .where('sl.storyId IN (:...ids)', { ids })
+      .groupBy('sl.storyId')
+      .getRawMany();
+    for (const row of likeRows) {
+      const stat = result.get(row.storyId);
+      if (stat) stat.likeCount = Number(row.cnt) || 0;
+    }
+
+    if (viewerId) {
+      const likedRows = await this.storyLikeRepo.find({
+        where: { userId: viewerId, storyId: In(ids) },
+      });
+      for (const like of likedRows) {
+        const stat = result.get(like.storyId);
+        if (stat) stat.liked = true;
+      }
+    }
+
+    return result;
+  }
+
+  /** 喜爱故事（不可撤回；重复请求幂等） */
+  async likeStory(
+    storyId: string,
+    userId: string,
+  ): Promise<{ liked: boolean; likeCount: number }> {
+    const approved = await this.approvedRepo.findOne({
+      where: { sourceStoryId: storyId },
+    });
+    if (!approved) {
+      throw new Error('故事不存在或未上架');
+    }
+    const existing = await this.storyLikeRepo.findOne({
+      where: { storyId, userId },
+    });
+    if (!existing) {
+      await this.storyLikeRepo.save(
+        this.storyLikeRepo.create({ storyId, userId }),
+      );
+    }
+    const likeCount = await this.storyLikeRepo.count({ where: { storyId } });
+    return { liked: true, likeCount };
+  }
+
+  /** 查询故事喜爱状态：喜爱总数 + 指定用户是否已喜爱 */
+  async getStoryLikeState(
+    storyId: string,
+    userId?: string,
+  ): Promise<{ likeCount: number; liked: boolean }> {
+    const likeCount = await this.storyLikeRepo.count({ where: { storyId } });
+    let liked = false;
+    if (userId) {
+      const existing = await this.storyLikeRepo.findOne({
+        where: { storyId, userId },
+      });
+      liked = !!existing;
+    }
+    return { likeCount, liked };
+  }
+
+  /** 用户喜爱的作品列表（仅返回当前仍在架的故事，按喜爱时间倒序） */
+  async getUserLikedStories(userId: string) {
+    const likes = await this.storyLikeRepo.find({
+      where: { userId },
+      order: { createdAt: 'DESC' },
+    });
+    if (!likes.length) return { data: [], total: 0 };
+    const storyIds = likes.map((l) => l.storyId);
+    const rows = await this.approvedRepo.find({
+      where: { sourceStoryId: In(storyIds), isUnpublished: false },
+    });
+    const orderIndex = new Map(storyIds.map((id, i) => [id, i]));
+    rows.sort(
+      (a, b) =>
+        (orderIndex.get(a.sourceStoryId) ?? 0) -
+        (orderIndex.get(b.sourceStoryId) ?? 0),
+    );
+    const stats = await this.getStoryStats(
+      rows.map((r) => r.sourceStoryId),
+      userId,
+    );
+    const authorIds = rows.map((r) => r.authorId).filter(Boolean);
+    const authors = await this.usersService.getUsers(authorIds);
+    const data = rows.map((r) => {
+      const stat = stats.get(r.sourceStoryId) || {
+        ...this.emptyStat(),
+        liked: true,
+      };
+      const author = authors.find((a) => a.id === r.authorId) || null;
+      return this.toPublicStory(r, author, { ...stat, liked: true });
+    });
+    return { data, total: data.length };
+  }
+
+  /** 用户作为内测者的故事列表（按加入时间倒序，含未发布作品） */
+  async getUserBetaStories(userId: string) {
+    const testers = await this.storyBetaTesterRepo.find({
+      where: { userId },
+      order: { createdAt: 'DESC' },
+    });
+    if (!testers.length) return { data: [], total: 0 };
+    const storyIds = testers.map((tester) => tester.storyId);
+    const stories = await this.storiesRepo.find({
+      where: { id: In(storyIds) },
+    });
+    const orderIndex = new Map(storyIds.map((id, index) => [id, index]));
+    stories.sort(
+      (a, b) => (orderIndex.get(a.id) ?? 0) - (orderIndex.get(b.id) ?? 0),
+    );
+    const authorIds = stories.map((s) => s.authorId).filter(Boolean);
+    const authors = await this.usersService.getUsers(authorIds);
+    const data = stories.map((story) => {
+      const author = authors.find((a) => a.id === story.authorId) || null;
+      return {
+        id: story.id,
+        title: story.title,
+        description: story.description,
+        shortname: story.shortname,
+        tags: story.tags ? story.tags.split(',') : [],
+        status: story.status,
+        passageSize: story.passageSize,
+        updatedAt: Number(story.updatedAt) || 0,
+        createdAt: Number(story.createdAt) || 0,
+        author: author
+          ? {
+              id: author.id,
+              username: author.username,
+              nickname: author.nickname,
+              avatar: author.avatar,
+              from: author.from,
+            }
+          : null,
+      };
+    });
+    return { data, total: data.length };
   }
 
   async findOne(id: string) {
@@ -298,6 +580,8 @@ export class StoriesService {
   }
 
   async remove(id: string): Promise<boolean> {
+    // 逻辑外键：手动清理内测用户关联（不依赖数据库级联）
+    await this.storyBetaTesterRepo.delete({ storyId: id });
     const res = await this.storiesRepo.delete({ id });
     return (res.affected ?? 0) > 0;
   }
@@ -428,6 +712,39 @@ export class StoriesService {
     }
   }
 
+  /** 内测邀请：若被添加用户为摸鱼派用户且配置了金手指，发送摸鱼派站内通知 */
+  private async sendBetaInviteNotice(
+    user: User,
+    story: Story,
+    domain?: string,
+  ): Promise<void> {
+    const config = ConfigService.getConfig();
+    if (
+      user.id === story.authorId ||
+      user.from !== 'fishpi' ||
+      !user.username ||
+      !config?.noticeGoldenKey
+    ) {
+      return;
+    }
+
+    try {
+      const key = story.shortname || story.id;
+      const siteDomain = domain || process.env.DOMAIN || '';
+      const title = story.title || '未命名';
+      const storyUrl = siteDomain ? `${siteDomain}/#/test/${key}` : '';
+      const storyLink = storyUrl ? `[${title}](${storyUrl})` : title;
+      const message = `你已成为故事《${storyLink}》的内测用户，可以在上架前提前体验。`;
+
+      const noticeFinger = FingerTo(config.noticeGoldenKey);
+      await noticeFinger.sendNotice(user.username, message).catch((err) => {
+        console.error(`向内测用户 ${user.username} 发送摸鱼派通知失败:`, err);
+      });
+    } catch (e) {
+      console.error('发送内测邀请摸鱼派通知异常:', e);
+    }
+  }
+
   /** 管理员审核并上架：创建 ApprovedStory 快照并将 story 标记为已发布 */
   async approve(
     id: string,
@@ -488,7 +805,19 @@ export class StoriesService {
       })
       .catch((err) => console.error('发送故事审核通过通知失败:', err));
 
-    // 2. 如果故事存在历史发布（或有玩家在玩），发送站内信通知：正在玩的故事发布了更新
+    // 2. 查询该故事的内测用户（故事上架时需收到专门通知）
+    const betaTesters = await this.storyBetaTesterRepo.find({
+      where: { storyId: story.id },
+    });
+    const betaUserIds = Array.from(
+      new Set(
+        betaTesters
+          .map((tester) => tester.userId)
+          .filter((uid) => uid && uid !== story.authorId),
+      ),
+    );
+
+    // 3. 如果故事存在历史发布（或有玩家在玩），发送站内信通知：正在玩的故事发布了更新（内测用户改收上架通知）
     const storyKeys = [story.id, story.shortname, existing?.id].filter(
       Boolean,
     ) as string[];
@@ -499,8 +828,19 @@ export class StoriesService {
         shortname: story.shortname,
         authorId: story.authorId,
         keys: storyKeys,
+        excludeUserIds: betaUserIds,
       })
       .catch((err) => console.error('发送故事更新通知失败:', err));
+
+    // 4. 发送站内信通知：内测的故事已上架
+    await this.notificationService
+      .notifyBetaStoryPublished({
+        userIds: betaUserIds,
+        storyId: story.id,
+        storyTitle: story.title,
+        shortname: story.shortname,
+      })
+      .catch((err) => console.error('发送内测故事上架通知失败:', err));
 
     await this.sendReviewNotice(story, 'approved', undefined, domain);
     return result;
@@ -641,5 +981,78 @@ export class StoriesService {
   /** 管理员：获取单个历史版本详情（含 content） */
   async findStoryHistoryById(historyId: string): Promise<StoryHistory | null> {
     return this.storyHistoryRepo.findOne({ where: { id: historyId } });
+  }
+
+  /** 判断用户是否为故事的内测用户（匿名用户一律不算） */
+  async isBetaTester(storyId: string, userId?: string): Promise<boolean> {
+    if (!storyId || !userId) return false;
+    const tester = await this.storyBetaTesterRepo.findOne({
+      where: { storyId, userId },
+    });
+    return !!tester;
+  }
+
+  /** 获取故事的内测用户列表（附带用户公开信息） */
+  async getBetaTesters(storyId: string) {
+    const testers = await this.storyBetaTesterRepo.find({
+      where: { storyId },
+      order: { createdAt: 'DESC' },
+    });
+    if (!testers.length) return [];
+    const users = await this.usersService.getUsers(
+      testers.map((tester) => tester.userId),
+    );
+    const userMap = new Map(users.map((user) => [user.id, user]));
+    return testers
+      .map((tester) => {
+        const user = userMap.get(tester.userId);
+        if (!user) return null;
+        return {
+          id: user.id,
+          username: user.username,
+          nickname: user.nickname,
+          avatar: user.avatar,
+          from: user.from,
+          addedAt: Number(tester.createdAt),
+        };
+      })
+      .filter((tester) => tester !== null);
+  }
+
+  async addBetaTester(
+    storyId: string,
+    userId: string,
+    domain?: string,
+  ): Promise<void> {
+    const user = await this.usersService.findById(userId);
+    if (!user) {
+      throw new NotFoundException('用户不存在');
+    }
+    const existing = await this.storyBetaTesterRepo.findOne({
+      where: { storyId, userId },
+    });
+    if (!existing) {
+      const tester = this.storyBetaTesterRepo.create({ storyId, userId });
+      await this.storyBetaTesterRepo.save(tester);
+      // 站内信通知被添加的内测用户
+      const story = await this.findById(storyId, false);
+      if (story) {
+        await this.notificationService
+          .notifyBetaTesterAdded({
+            userId,
+            authorId: story.authorId,
+            storyId: story.id,
+            storyTitle: story.title,
+            shortname: story.shortname,
+          })
+          .catch((err) => console.error('发送内测邀请通知失败:', err));
+        // 若对方为摸鱼派用户且配置了金手指，同时发送摸鱼派站内通知
+        await this.sendBetaInviteNotice(user, story, domain);
+      }
+    }
+  }
+
+  async removeBetaTester(storyId: string, userId: string): Promise<void> {
+    await this.storyBetaTesterRepo.delete({ storyId, userId });
   }
 }

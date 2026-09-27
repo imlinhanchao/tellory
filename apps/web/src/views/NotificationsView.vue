@@ -226,7 +226,7 @@ async function loadNotifications(page = 1) {
       type = "comment_story,comment_reply";
     } else if (activeTab.value === "stories") {
       // 故事动态
-      type = "story_update,story_approved";
+      type = "story_update,story_approved,beta_invited,beta_story_published";
     }
 
     const res = await getNotifications({
@@ -241,7 +241,13 @@ async function loadNotifications(page = 1) {
     if (activeTab.value === "comments") {
       list = list.filter((i) => i.type === "comment_story" || i.type === "comment_reply");
     } else if (activeTab.value === "stories") {
-      list = list.filter((i) => i.type === "story_update" || i.type === "story_approved");
+      list = list.filter(
+        (i) =>
+          i.type === "story_update" ||
+          i.type === "story_approved" ||
+          i.type === "beta_invited" ||
+          i.type === "beta_story_published",
+      );
     }
 
     items.value = list;
@@ -302,7 +308,9 @@ function handleClickNotification(item: NotificationItem) {
     if (item.extra?.sceneName) {
       query.scene = item.extra.sceneName;
     }
-    router.push({ path: `/play/${targetKey}`, query });
+    // 内测邀请跳试玩路由（作品可能尚未上架），其余跳正式阅读路由
+    const routePath = item.type === "beta_invited" ? "test" : "play";
+    router.push({ path: `/${routePath}/${targetKey}`, query });
   }
 }
 
@@ -316,6 +324,10 @@ function getTypeIcon(type: NotificationType) {
       return "mdi:book-refresh-outline";
     case "story_approved":
       return "mdi:check-decagram-outline";
+    case "beta_invited":
+      return "mdi:flask-outline";
+    case "beta_story_published":
+      return "mdi:book-check-outline";
     default:
       return "mdi:bell-outline";
   }
@@ -331,6 +343,10 @@ function getTypeIconClass(type: NotificationType) {
       return "bg-success/10 text-success";
     case "story_approved":
       return "bg-warning/10 text-warning";
+    case "beta_invited":
+      return "bg-secondary/10 text-secondary";
+    case "beta_story_published":
+      return "bg-success/10 text-success";
     default:
       return "bg-base-200 text-base-content";
   }
@@ -346,6 +362,10 @@ function getTypeBadgeClass(type: NotificationType) {
       return "badge-success";
     case "story_approved":
       return "badge-warning";
+    case "beta_invited":
+      return "badge-secondary";
+    case "beta_story_published":
+      return "badge-success";
     default:
       return "badge-ghost";
   }
@@ -361,6 +381,10 @@ function getTypeLabel(type: NotificationType) {
       return "故事更新";
     case "story_approved":
       return "审核通过";
+    case "beta_invited":
+      return "内测邀请";
+    case "beta_story_published":
+      return "内测上架";
     default:
       return "系统通知";
   }

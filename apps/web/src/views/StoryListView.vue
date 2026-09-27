@@ -67,6 +67,25 @@
       </div>
     </div>
 
+    <!-- 公开浏览排序栏：最新 / 热度 / 喜爱 -->
+    <div v-if="isPublicView" class="flex flex-wrap items-center gap-1.5">
+      <button
+        v-for="tab in sortTabs"
+        :key="tab.value"
+        type="button"
+        class="btn btn-xs rounded-full transition-colors gap-1"
+        :class="
+          query.sort === tab.value
+            ? 'btn-primary'
+            : 'btn-ghost text-base-content/70 hover:bg-base-200'
+        "
+        @click="switchSort(tab.value)"
+      >
+        <Icon :icon="tab.icon" class="w-3.5 h-3.5" />
+        <span>{{ tab.label }}</span>
+      </button>
+    </div>
+
     <!-- 管理员状态筛选栏 -->
     <div v-if="isAdminView" class="flex flex-wrap items-center gap-1.5">
       <button
@@ -212,6 +231,25 @@
               <Icon icon="mdi:tag-outline" class="w-3 h-3" />
               <span>{{ t }}</span>
             </button>
+          </div>
+
+          <!-- 公开浏览：阅读/评论/喜爱统计 -->
+          <div
+            v-if="isPublicView"
+            class="flex items-center gap-3 text-xs text-base-content/50 pt-1"
+          >
+            <span class="flex items-center gap-1" title="阅读数（去重玩家）">
+              <Icon icon="mdi:eye-outline" class="w-3.5 h-3.5" />
+              {{ s.playCount || 0 }}
+            </span>
+            <span class="flex items-center gap-1" title="评论数">
+              <Icon icon="mdi:comment-outline" class="w-3.5 h-3.5" />
+              {{ s.commentCount || 0 }}
+            </span>
+            <span class="flex items-center gap-1" title="喜爱数">
+              <Icon icon="mdi:heart-outline" class="w-3.5 h-3.5" />
+              {{ s.likeCount || 0 }}
+            </span>
           </div>
         </div>
 
@@ -359,7 +397,12 @@
 import { useRouter } from "vue-router";
 import type { IStory } from "@/api/stories";
 import { useAuthStore } from "@/stores/modules/auth";
-import { listStories, unpublishStory, republishStory, deleteStory } from "@/api/stories";
+import {
+  listStories,
+  unpublishStory,
+  republishStory,
+  deleteStory,
+} from "@/api/stories";
 import { ref, onMounted, watch, reactive, computed } from "vue";
 import { useRoute } from "vue-router";
 import { Icon } from "@iconify/vue";
@@ -385,6 +428,22 @@ const isCurrentUser = computed(() => {
 const isAdminView = computed(() => {
   return route.name === "admin-story-list";
 });
+
+/** 公开浏览视图（首页 / 故事列表）：显示排序栏、统计与喜爱按钮 */
+const isPublicView = computed(() => {
+  return !isCurrentUser.value && !isAdminView.value;
+});
+
+type SortType = "latest" | "hot" | "liked";
+
+const sortTabs = [
+  { label: "最新", value: "latest", icon: "mdi:clock-outline" },
+  { label: "热度", value: "hot", icon: "mdi:fire" },
+  { label: "喜爱", value: "liked", icon: "mdi:heart-outline" },
+] as const;
+
+const normalizeSort = (val: unknown): SortType =>
+  val === "hot" || val === "liked" ? val : "latest";
 
 const statusTabs = [
   { label: "全部", value: "all" },
@@ -412,7 +471,9 @@ const query = reactive({
   search: "",
   authorId: isCurrentUser.value ? getUser?.id : "",
   createdAt: Date.now(),
+  page: 1,
   limit: 20,
+  sort: "latest" as SortType,
   private: isAdminView.value ? 1 : undefined,
 });
 
@@ -425,9 +486,15 @@ const load = async (isMore = false) => {
   try {
     const params: any = {
       search: query.search,
-      createdAt: query.createdAt,
       limit: query.limit,
+      sort: query.sort,
     };
+    // 最新排序使用时间游标；热度/喜爱排序使用偏移分页
+    if (query.sort === "latest") {
+      params.createdAt = query.createdAt;
+    } else {
+      params.page = query.page;
+    }
     if (query.authorId) params.authorId = query.authorId;
     if (isAdminView.value) params.private = 1;
     const res = await listStories(params);
@@ -447,9 +514,30 @@ const load = async (isMore = false) => {
 
 const loadMore = async () => {
   if (loadingMore.value || !hasMore.value) return;
-  query.createdAt =
-    stories.value[stories.value.length - 1]?.createdAt ?? Date.now();
+  if (query.sort === "latest") {
+    query.createdAt =
+      stories.value[stories.value.length - 1]?.createdAt ?? Date.now();
+  } else {
+    query.page += 1;
+  }
   await load(true);
+};
+
+/** 重置列表分页状态（切换排序/重新加载时使用） */
+const resetList = () => {
+  stories.value = [];
+  totalCount.value = 0;
+  query.page = 1;
+  query.createdAt = Date.now();
+};
+
+/** 切换排序：同步到 URL query，由 route 监听器触发加载 */
+const switchSort = (sort: SortType) => {
+  if (query.sort === sort) return;
+  const q: any = { ...route.query };
+  if (sort !== "latest") q.sort = sort;
+  else delete q.sort;
+  router.push({ path: route.path, query: q });
 };
 
 const createNew = () => {
@@ -521,6 +609,7 @@ onMounted(async () => {
   }
   const q = route.query.search;
   query.search = q?.toString() || "";
+  query.sort = normalizeSort(route.query.sort);
   await load();
 
   watch(
@@ -529,7 +618,20 @@ onMounted(async () => {
       const v = val?.toString() || "";
       if (v !== query.search) {
         query.createdAt = Date.now();
+        query.page = 1;
         query.search = v;
+      }
+    },
+  );
+
+  watch(
+    () => route.query.sort,
+    (val) => {
+      const s = normalizeSort(val);
+      if (s !== query.sort) {
+        query.sort = s;
+        resetList();
+        load();
       }
     },
   );
@@ -595,7 +697,10 @@ function doSearch() {
   const q: any = { ...route.query };
   if (query.search) q.search = query.search;
   else delete q.search;
+  if (query.sort !== "latest") q.sort = query.sort;
+  else delete q.sort;
   query.createdAt = Date.now();
+  query.page = 1;
   router.push({ path: route.path, query: q });
 }
 
@@ -625,6 +730,8 @@ watch(
     }
     statusFilter.value = "all";
     query.createdAt = Date.now();
+    query.page = 1;
+    query.sort = normalizeSort(route.query.sort);
     load();
   },
 );

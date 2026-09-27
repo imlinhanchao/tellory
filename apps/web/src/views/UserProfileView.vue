@@ -66,18 +66,90 @@
           <a
             class="tab tab-lg rounded-full px-8 transition-all duration-300"
             :class="{ 'tab-active bg-base-100 shadow-sm': activeTab === 'stories' }"
-            @click="activeTab = 'stories'"
+            @click="switchTab('stories')"
           >
             发布的故事
           </a>
           <a
             class="tab tab-lg rounded-full px-8 transition-all duration-300"
+            :class="{ 'tab-active bg-base-100 shadow-sm': activeTab === 'likes' }"
+            @click="switchTab('likes')"
+          >
+            喜爱的作品
+          </a>
+          <a
+            class="tab tab-lg rounded-full px-8 transition-all duration-300"
             :class="{ 'tab-active bg-base-100 shadow-sm': activeTab === 'progress' }"
-            @click="activeTab = 'progress'"
+            @click="switchTab('progress')"
           >
             阅读记录
           </a>
         </div>
+      </div>
+
+      <!-- 喜爱的作品 -->
+      <div v-if="activeTab === 'likes'" class="animate-in fade-in duration-500">
+        <div v-if="likedLoading" class="text-center py-12">
+          <span class="loading loading-spinner loading-lg text-primary"></span>
+        </div>
+        <template v-else>
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div
+              v-for="s in likedStories"
+              :key="s.id"
+              class="card bg-base-100 border border-base-200 p-5 rounded-2xl hover:shadow-lg transition-all"
+            >
+              <div class="flex flex-col h-full">
+                <div class="flex-1">
+                  <div class="flex items-start justify-between gap-2">
+                    <h4 class="font-bold text-lg truncate flex items-center gap-2">
+                      {{ s.title }}
+                      <button
+                        class="btn btn-ghost btn-xs"
+                        @click="previewStory(storyRouteKey(s), s.status)"
+                      >
+                        <Icon icon="mdi:book-open-variant" />
+                      </button>
+                    </h4>
+                    <span class="badge badge-sm badge-error badge-soft gap-1 shrink-0">
+                      <Icon icon="mdi:heart" class="w-3 h-3" />
+                      喜爱
+                    </span>
+                  </div>
+                  <div class="flex items-center gap-1 text-xs text-base-content/60 mt-1">
+                    <Icon icon="mdi:account-outline" class="w-3.5 h-3.5 shrink-0" />
+                    <span class="truncate">{{
+                      s.author?.nickname || s.author?.username || "未知作者"
+                    }}</span>
+                  </div>
+                  <p class="text-sm text-base-content/60 line-clamp-2 mt-3">
+                    {{ s.description || "暂无描述" }}
+                  </p>
+                </div>
+                <div
+                  class="mt-6 flex items-center justify-between text-sm text-base-content/50"
+                >
+                  <div class="flex items-center gap-2">
+                    <Icon icon="mdi:book-open-variant" class="w-4 h-4" />
+                    <span>{{ s.passageSize || 0 }} 章</span>
+                  </div>
+                  <button
+                    class="btn btn-primary btn-xs rounded-full px-4"
+                    @click="previewStory(storyRouteKey(s), s.status)"
+                  >
+                    阅读
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div
+            v-if="!likedStories.length"
+            class="text-center text-base-content/50 py-16"
+          >
+            暂无喜爱的作品
+          </div>
+        </template>
       </div>
 
       <div v-if="activeTab === 'progress'" class="animate-in fade-in duration-500">
@@ -337,7 +409,11 @@
 import { ref, computed, watch } from "vue";
 import md5 from "crypto-js/md5";
 import { useRoute, useRouter } from "vue-router";
-import { listStories, type IStory } from "@/api/stories";
+import {
+  listStories,
+  getUserLikedStories,
+  type IStory,
+} from "@/api/stories";
 import { getUserUnlocks, type IUserStoryProgress } from "@/api/play";
 import { updateProfile } from "@/api/user";
 import { storyRouteKey } from "@/lib/storyRoute";
@@ -355,12 +431,39 @@ const paramFrom = computed(() => route.params.from as string | undefined);
 const paramUsername = computed(() => route.params.username as string | undefined);
 const stories = ref<IStory[]>([]);
 const progress = ref<IUserStoryProgress[]>([]);
-const activeTab = ref<"stories" | "progress">(
+const activeTab = ref<"stories" | "likes" | "progress">(
   stories.value.length > 0 ? "stories" : "progress"
 );
 const totalCount = ref(0);
 const loading = ref(true);
 const userInfo = ref<User>();
+
+// 喜爱的作品
+const likedStories = ref<IStory[]>([]);
+const likedLoading = ref(false);
+const likedLoaded = ref(false);
+
+const switchTab = (tab: "stories" | "likes" | "progress") => {
+  activeTab.value = tab;
+  if (tab === "likes") {
+    loadLiked();
+  }
+};
+
+const loadLiked = async () => {
+  const uid = userInfo.value?.id;
+  if (!uid || likedLoading.value || likedLoaded.value) return;
+  likedLoading.value = true;
+  try {
+    const res = await getUserLikedStories(uid);
+    likedStories.value = res?.data || [];
+    likedLoaded.value = true;
+  } catch {
+    // 错误提示由 http 层统一处理
+  } finally {
+    likedLoading.value = false;
+  }
+};
 
 const isCurrentUser = computed(() => auth.getUser?.id === userInfo.value?.id);
 const cravatarHash = computed(() => {
@@ -537,6 +640,8 @@ watch(
     userInfo.value = undefined;
     stories.value = [];
     progress.value = [];
+    likedStories.value = [];
+    likedLoaded.value = false;
     totalCount.value = 0;
     load();
   },

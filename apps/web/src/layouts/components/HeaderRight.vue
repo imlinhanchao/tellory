@@ -238,6 +238,12 @@
           </router-link>
         </li>
         <li>
+          <router-link :to="{ path: '/beta-stories' }">
+            <Icon icon="mdi:flask-outline" class="w-4 h-4" />
+            内测故事
+          </router-link>
+        </li>
+        <li>
           <router-link :to="{ path: profileUrl }">
             <Icon icon="mdi:account-circle-outline" class="w-4 h-4" />
             个人中心

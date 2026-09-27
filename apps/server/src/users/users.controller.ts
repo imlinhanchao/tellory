@@ -8,6 +8,7 @@ import {
   UseGuards,
   Request,
   Param,
+  Query,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { UsersService } from './users.service';
@@ -54,6 +55,14 @@ export class UsersController {
     );
     if (!user) throw new NotFoundException('用户不存在');
     return omit(user, User.unsafeKey);
+  }
+
+  /** 按昵称/用户名搜索用户（需登录；用于作者添加内测用户等场景） */
+  @UseGuards(JwtAuthGuard)
+  @Get('search')
+  async search(@Query('keyword') keyword: string) {
+    const users = await this.usersService.search(keyword || '');
+    return users.map((user) => omit(user, User.unsafeKey));
   }
 
   @Get(':from/:username')
