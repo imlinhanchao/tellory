@@ -240,7 +240,7 @@ export class StoriesService {
     const authors = await this.usersService.getUsers(authorIds);
     return {
       data: data.map((story) => ({
-        ...story,
+        ...omit(story, ['content']),
         tags: story.tags?.split(',') || [],
         author: authors.find((author) => author.id === story.authorId),
       })),
@@ -266,17 +266,12 @@ export class StoriesService {
     return `(SELECT COUNT(*) FROM \`${likeTable}\` sl WHERE sl.storyId = s.sourceStoryId)`;
   }
 
-  private toPublicStory(
-    row: ApprovedStory,
-    author: any,
-    stat: StoryStat,
-  ): PublicStory {
+  private toPublicStory(row: ApprovedStory, author: any, stat: StoryStat) {
     return {
       id: row.sourceStoryId,
       title: row.title,
       description: row.description,
       shortname: row.shortname,
-      content: row.content,
       passageSize: row.passageSize || 0,
       tags: row.tags ? String(row.tags).split(',') : [],
       authorId: row.authorId,
