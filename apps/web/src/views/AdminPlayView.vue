@@ -183,81 +183,211 @@
     </div>
 
     <dialog ref="detailDialogRef" class="modal">
-      <div class="modal-box max-w-5xl p-0 overflow-hidden">
-        <div class="px-5 py-4 border-b border-base-200 flex items-center justify-between">
-          <h3 class="font-bold text-base">Play 详情</h3>
-          <form method="dialog">
-            <button class="btn btn-sm btn-circle btn-ghost">✕</button>
-          </form>
+      <!-- 全屏 modal box -->
+      <div class="modal-box w-screen max-w-none h-screen max-h-none rounded-none p-0 flex flex-col overflow-hidden">
+
+        <!-- 顶栏 -->
+        <div class="px-4 sm:px-6 py-3 border-b border-base-200 flex items-center justify-between shrink-0 bg-base-100">
+          <div class="flex items-center gap-3 min-w-0">
+            <h3 class="font-bold text-base truncate">Play 详情</h3>
+            <template v-if="detail">
+              <span class="badge badge-sm font-mono hidden sm:inline-flex truncate max-w-40">{{ detail.id }}</span>
+              <span class="badge badge-sm" :class="detail.isEnding ? 'badge-neutral' : 'badge-success badge-soft'">
+                {{ detail.isEnding ? '已结束' : '进行中' }}
+              </span>
+            </template>
+          </div>
+          <div class="flex items-center gap-2 shrink-0">
+            <!-- 视图切换（PC 显示在顶栏） -->
+            <div v-if="detail" class="join hidden sm:flex">
+              <button
+                v-for="tab in detailTabs"
+                :key="tab.key"
+                type="button"
+                class="join-item btn btn-xs"
+                :class="detailTab === tab.key ? 'btn-primary' : 'btn-ghost'"
+                @click="detailTab = tab.key"
+              >{{ tab.label }}</button>
+            </div>
+            <form method="dialog">
+              <button class="btn btn-sm btn-circle btn-ghost">✕</button>
+            </form>
+          </div>
         </div>
 
-        <div v-if="detailLoading" class="p-8 text-center">
+        <!-- 移动端 tab 导航（锚点滚动，仅可视化模式） -->
+        <div v-if="detail && detailTab === 'visual'" class="sm:hidden border-b border-base-200 shrink-0 bg-base-100 overflow-x-auto">
+          <div class="flex px-4 gap-1 py-1.5 min-w-max">
+            <button
+              v-for="section in detailSections"
+              :key="section.id"
+              type="button"
+              class="btn btn-xs btn-ghost"
+              @click="scrollToSection(section.id)"
+            >{{ section.label }}</button>
+          </div>
+        </div>
+        <!-- 移动端视图切换（JSON 模式入口） -->
+        <div v-if="detail" class="sm:hidden border-b border-base-200 px-4 py-1.5 shrink-0 bg-base-100 flex gap-2">
+          <button
+            v-for="tab in detailTabs"
+            :key="tab.key"
+            type="button"
+            class="btn btn-xs"
+            :class="detailTab === tab.key ? 'btn-primary' : 'btn-ghost'"
+            @click="detailTab = tab.key"
+          >{{ tab.label }}</button>
+        </div>
+
+        <div v-if="detailLoading" class="flex-1 flex items-center justify-center">
           <span class="loading loading-spinner loading-md text-primary"></span>
         </div>
 
-        <div v-else-if="detail" class="p-5 space-y-5 max-h-[78vh] overflow-y-auto">
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-            <div class="card bg-base-200/50 border border-base-200">
-              <div class="card-body p-3 space-y-1.5">
-                <div><span class="text-base-content/60">Play ID：</span><span class="font-mono text-xs">{{ detail.id }}</span></div>
-                <div><span class="text-base-content/60">Story ID：</span><span class="font-mono text-xs">{{ detail.storyId }}</span></div>
-                <div><span class="text-base-content/60">User ID：</span><span class="font-mono text-xs">{{ detail.userId || '(空)' }}</span></div>
-                <div><span class="text-base-content/60">当前段落：</span><span class="font-mono text-xs">{{ detail.currentPassage }}</span></div>
-                <div><span class="text-base-content/60">创建时间：</span>{{ formatTime(detail.createdAt) }}</div>
-                <div><span class="text-base-content/60">更新时间：</span>{{ formatTime(detail.updatedAt) }}</div>
-              </div>
-            </div>
+        <!-- 可视化视图：PC 三栏，移动端单列锚点滚动 -->
+        <div v-else-if="detail && detailTab === 'visual'" ref="detailScrollRef" class="flex-1 overflow-y-auto">
+          <div class="grid grid-cols-1 lg:grid-cols-3 h-full divide-y lg:divide-y-0 lg:divide-x divide-base-200">
 
-            <div class="card bg-base-200/50 border border-base-200">
-              <div class="card-body p-3 space-y-1.5">
-                <div><span class="text-base-content/60">故事标题：</span>{{ detail.story?.title || '未知故事' }}</div>
-                <div>
-                  <span class="text-base-content/60">状态：</span>
-                  <span class="badge badge-sm" :class="detail.isEnding ? 'badge-neutral' : 'badge-success badge-soft'">
-                    {{ detail.isEnding ? '已结束' : '进行中' }}
-                  </span>
+            <!-- 栏 1：基础信息 + 当前段落预览 + 变量 -->
+            <div class="overflow-y-auto p-4 sm:p-5 space-y-5">
+              <section :id="detailSections[0].id">
+                <h4 class="font-semibold text-sm mb-2">{{ detailSections[0].label }}</h4>
+                <div class="space-y-1.5 text-sm">
+                  <div><span class="text-base-content/60">Play ID：</span><span class="font-mono text-xs break-all">{{ detail.id }}</span></div>
+                  <div><span class="text-base-content/60">Story ID：</span><span class="font-mono text-xs break-all">{{ detail.storyId }}</span></div>
+                  <div><span class="text-base-content/60">User ID：</span><span class="font-mono text-xs break-all">{{ detail.userId || '(空)' }}</span></div>
+                  <div><span class="text-base-content/60">故事标题：</span>{{ detail.story?.title || '未知故事' }}</div>
+                  <div><span class="text-base-content/60">当前段落：</span><span class="font-mono text-xs">{{ detail.currentPassage }}</span></div>
+                  <div><span class="text-base-content/60">创建时间：</span>{{ formatTime(detail.createdAt) }}</div>
+                  <div><span class="text-base-content/60">更新时间：</span>{{ formatTime(detail.updatedAt) }}</div>
                 </div>
-                <div><span class="text-base-content/60">历史条目：</span>{{ detail.history?.length || 0 }}</div>
-                <div><span class="text-base-content/60">变量键数：</span>{{ Object.keys(detail.variables || {}).length }}</div>
-              </div>
-            </div>
-          </div>
+              </section>
 
-          <div class="space-y-2">
-            <div class="flex items-center justify-between">
-              <h4 class="font-semibold text-sm">decodedDataset</h4>
-              <div class="join">
-                <button
-                  type="button"
-                  class="btn btn-xs btn-ghost join-item"
-                  @click="copyStorySourceFromDecodedDataset(detail.decodedDataset)"
-                >
-                  复制故事源码
-                </button>
-                <button
-                  type="button"
-                  class="btn btn-xs btn-ghost join-item"
-                  @click="copyJson(detail.decodedDataset)"
-                >
-                  复制 JSON
-                </button>
-              </div>
+              <div class="divider my-0"></div>
+
+              <section :id="detailSections[1].id">
+                <h4 class="font-semibold text-sm mb-2">{{ detailSections[1].label }}</h4>
+                <div
+                  v-if="detail.html"
+                  class="prose prose-sm max-w-none bg-base-200/50 border border-base-200 rounded-xl p-4 text-sm leading-relaxed"
+                  v-html="detail.html"
+                />
+                <div v-else class="text-xs text-base-content/50 italic">无 HTML 内容</div>
+              </section>
+
+              <div class="divider my-0"></div>
+
+              <section :id="detailSections[2].id">
+                <h4 class="font-semibold text-sm mb-2">{{ detailSections[2].label }}</h4>
+                <div v-if="Object.keys(detail.variables || {}).length" class="overflow-x-auto">
+                  <table class="table table-xs">
+                    <thead><tr><th>键</th><th>值</th></tr></thead>
+                    <tbody>
+                      <tr v-for="(val, key) in detail.variables" :key="key">
+                        <td class="font-mono">{{ key }}</td>
+                        <td class="font-mono">{{ JSON.stringify(val) }}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+                <div v-else class="text-xs text-base-content/50 italic">无变量</div>
+              </section>
             </div>
+
+            <!-- 栏 2：游玩历史时间线 -->
+            <div class="overflow-y-auto p-4 sm:p-5">
+              <section :id="detailSections[3].id">
+                <h4 class="font-semibold text-sm mb-3">{{ detailSections[3].label }}</h4>
+                <div v-if="detail.history?.length" class="space-y-1.5">
+                  <div
+                    v-for="(step, idx) in detail.history"
+                    :key="idx"
+                    class="flex gap-3 text-xs"
+                  >
+                    <div class="flex flex-col items-center shrink-0">
+                      <div class="w-5 h-5 rounded-full bg-primary/15 text-primary flex items-center justify-center font-medium text-[10px]">{{ idx + 1 }}</div>
+                      <div v-if="idx < detail.history.length - 1" class="w-px flex-1 bg-base-300 my-0.5"></div>
+                    </div>
+                    <div class="pb-3 min-w-0 flex-1">
+                      <div class="flex items-center gap-2 flex-wrap">
+                        <span class="font-mono text-base-content/70">{{ step.from }}</span>
+                        <Icon icon="mdi:arrow-right" class="w-3 h-3 text-base-content/40 shrink-0" />
+                        <span class="font-mono font-medium">{{ step.to }}</span>
+                        <span class="ml-auto text-base-content/40 shrink-0 whitespace-nowrap">{{ formatTime(step.at) }}</span>
+                      </div>
+                      <div v-if="step.action" class="mt-0.5 text-base-content/60 truncate">动作：{{ step.action }}</div>
+                    </div>
+                  </div>
+                </div>
+                <div v-else class="text-xs text-base-content/50 italic">暂无历史记录</div>
+              </section>
+            </div>
+
+            <!-- 栏 3：故事段落 -->
+            <div class="overflow-y-auto p-4 sm:p-5">
+              <section :id="detailSections[4].id">
+                <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+                  <h4 class="font-semibold text-sm">{{ detailSections[4].label }}</h4>
+                  <div class="flex gap-1 flex-wrap">
+                    <button type="button" class="btn btn-xs btn-ghost" @click="toggleAllPassages(true)">全部展开</button>
+                    <button type="button" class="btn btn-xs btn-ghost" @click="toggleAllPassages(false)">全部折叠</button>
+                    <button type="button" class="btn btn-xs btn-ghost" @click="copyStorySourceFromDecodedDataset(detail.decodedDataset)">复制源码</button>
+                    <button type="button" class="btn btn-xs btn-ghost" @click="copyJson(detail.decodedDataset)">复制 JSON</button>
+                  </div>
+                </div>
+                <div v-if="detail.decodedDataset?.passages?.length" class="space-y-2">
+                  <div
+                    v-for="passage in (detail.decodedDataset.passages as any[])"
+                    :key="passage.name"
+                    class="border border-base-200 rounded-xl overflow-hidden"
+                    :class="passage.name === detail.currentPassage ? 'border-primary/40 bg-primary/5' : 'bg-base-200/30'"
+                  >
+                    <button
+                      type="button"
+                      class="w-full flex items-center gap-2 px-3 py-2 border-b border-base-200/60 flex-wrap text-left hover:bg-base-200/40 transition-colors"
+                      @click="collapsedPassages.has(passage.name) ? collapsedPassages.delete(passage.name) : collapsedPassages.add(passage.name)"
+                    >
+                      <Icon
+                        :icon="collapsedPassages.has(passage.name) ? 'mdi:chevron-right' : 'mdi:chevron-down'"
+                        class="w-3.5 h-3.5 text-base-content/40 shrink-0"
+                      />
+                      <span class="font-mono text-xs font-semibold">{{ passage.name }}</span>
+                      <span v-if="passage.name === detail.currentPassage" class="badge badge-primary badge-xs badge-soft">当前</span>
+                      <span
+                        v-for="tag in (passage.tags as string[])"
+                        :key="tag"
+                        class="badge badge-neutral badge-xs badge-soft"
+                      >{{ tag }}</span>
+                      <span v-if="collapsedPassages.has(passage.name)" class="ml-auto text-[10px] text-base-content/30 font-normal">
+                        {{ (passage.content as string)?.length ?? 0 }} 字符
+                      </span>
+                    </button>
+                    <pre v-if="!collapsedPassages.has(passage.name)" class="p-3 text-xs leading-relaxed whitespace-pre-wrap wrap-break-word"><code>{{ passage.content }}</code></pre>
+                  </div>
+                </div>
+                <div v-else class="text-xs text-base-content/50 italic">无段落数据</div>
+              </section>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- 原始 JSON 视图 -->
+        <div v-else-if="detail && detailTab === 'json'" class="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5">
+          <div class="space-y-2">
+            <h4 class="font-semibold text-sm">decodedDataset</h4>
             <pre class="bg-base-200/60 border border-base-200 rounded-xl p-3 text-xs overflow-x-auto leading-relaxed"><code>{{ prettyJson(detail.decodedDataset) }}</code></pre>
           </div>
-
           <div class="space-y-2">
             <h4 class="font-semibold text-sm">variables</h4>
             <pre class="bg-base-200/60 border border-base-200 rounded-xl p-3 text-xs overflow-x-auto leading-relaxed"><code>{{ prettyJson(detail.variables) }}</code></pre>
           </div>
-
           <div class="space-y-2">
             <h4 class="font-semibold text-sm">history</h4>
             <pre class="bg-base-200/60 border border-base-200 rounded-xl p-3 text-xs overflow-x-auto leading-relaxed"><code>{{ prettyJson(detail.history) }}</code></pre>
           </div>
         </div>
 
-        <div v-else class="p-8 text-center text-base-content/60">未找到详情数据</div>
+        <div v-else-if="!detailLoading" class="flex-1 flex items-center justify-center text-base-content/60">未找到详情数据</div>
       </div>
       <form method="dialog" class="modal-backdrop">
         <button>close</button>
@@ -267,7 +397,7 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref, onMounted } from "vue";
+import { reactive, ref, onMounted, watch } from "vue";
 import { Icon } from "@iconify/vue";
 import Message from "@/components/msg";
 import msgbox from "@/components/msgbox";
@@ -289,6 +419,46 @@ const detailLoading = ref(false);
 const detail = ref<IAdminPlayDetail | null>(null);
 const detailDialogRef = ref<HTMLDialogElement | null>(null);
 const deletingId = ref("");
+
+type DetailTab = "visual" | "json";
+const detailTab = ref<DetailTab>("visual");
+const detailTabs: { key: DetailTab; label: string }[] = [
+  { key: "visual", label: "可视化" },
+  { key: "json", label: "原始 JSON" },
+];
+const detailSections = [
+  { id: "section-info",     label: "基础信息" },
+  { id: "section-html",     label: "段落预览" },
+  { id: "section-vars",     label: "变量" },
+  { id: "section-history",  label: "历史" },
+  { id: "section-passages", label: "故事段落" },
+] as const;
+
+const detailScrollRef = ref<HTMLElement | null>(null);
+const collapsedPassages = ref(new Set<string>());
+
+// 展开/折叠所有段落，切换详情时重置
+const toggleAllPassages = (expand: boolean) => {
+  if (expand) {
+    collapsedPassages.value.clear();
+  } else {
+    const passages = (detail.value?.decodedDataset as any)?.passages as any[] | undefined;
+    collapsedPassages.value = new Set(passages?.map((p) => p.name) ?? []);
+  }
+};
+
+const scrollToSection = (id: string) => {
+  const el = detailScrollRef.value?.querySelector(`#${id}`);
+  el?.scrollIntoView({ behavior: "smooth", block: "start" });
+};
+
+// 每次打开详情重置视图和折叠状态
+watch(detail, (val) => {
+  if (val) {
+    detailTab.value = "visual";
+    collapsedPassages.value = new Set();
+  }
+});
 
 const filters = reactive({
   limit: 20,

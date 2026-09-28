@@ -173,6 +173,17 @@ export class PlayService {
 
     const qb = this.playRepo
       .createQueryBuilder('play')
+      // 排除 html / dataset 大字段，仅列表展示用不到
+      .select([
+        'play.id',
+        'play.storyId',
+        'play.userId',
+        'play.currentPassage',
+        'play.isEnding',
+        'play.createdAt',
+        'play.updatedAt',
+        'play.history',
+      ])
       .where('play.createdAt <= :createdAt', { createdAt })
       .orderBy('play.createdAt', 'DESC')
       .skip(skip)
