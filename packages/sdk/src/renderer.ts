@@ -1034,7 +1034,7 @@ export function renderMarkdownBlocks(input: string): string {
   const flushParagraph = () => {
     if (!paragraphLines.length) return;
     output.push(
-      `<p>${renderMarkdownInline(paragraphLines.join("<br />"))}</p>`,
+      `<p>${renderMarkdownInline(paragraphLines.join("<br />").replaceAll("</p><br />", "</p>"))}</p>`,
     );
     paragraphLines.length = 0;
   };
