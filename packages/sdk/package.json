@@ -1,6 +1,6 @@
 {
   "name": "tellory",
-  "version": "0.0.15",
+  "version": "0.0.16",
   "description": "The Tellory interactive story engine shared SDK: story source parsing, serialization and rendering.",
   "main": "dist/index.mjs",
   "module": "dist/index.mjs",
@@ -34,6 +34,7 @@
     "prepare": "npm run build",
     "build": "tsdown src/index.ts",
     "dev": "tsdown src/index.ts --watch",
+    "test": "vitest run",
     "docs:build": "typedoc",
     "docs:watch": "typedoc --watch"
   },
@@ -41,7 +42,8 @@
     "tsdown": "^0.18.4",
     "typedoc": "^0.28.20",
     "typedoc-plugin-markdown": "^4.13.0",
-    "typescript": "^5.1.6"
+    "typescript": "^5.1.6",
+    "vitest": "^5.0.2"
   },
   "release": {
     "branches": [

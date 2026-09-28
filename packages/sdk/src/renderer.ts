@@ -797,7 +797,21 @@ export function renderEndingMarker(marker: StorySpecialMarker): string {
 }
 
 /**
- * Runs a passage's `(set: ...)` side effects when it is entered, ignoring the returned text.
+ * Processes a passage's entry-time side effects sequentially in document order.
+ *
+ * Walks the passage source token by token so that a `(set:)` appearing before
+ * an `(if:)` is applied before the `(if:)` branch is selected — matching the
+ * natural reading order of the passage.
+ *
+ * Handles, in order of appearance:
+ *   - `(fn:"name")[code]`  — registers the function for later `(call:)` use
+ *   - `(set: $x to expr)` — mutates `variables` immediately
+ *   - `(point: ...)` / `(end: ...)` — queues point markers
+ *   - `(if: ...) [...] (else-if: ...) [...] (else:) [...]`
+ *                         — selects a branch and recurses into it
+ *
+ * Macros that are part of a link action (attached after `[[...]]` or inside
+ * `(link:)[...]`) are skipped; they only run on click.
  *
  * @param content - The entered passage's raw content.
  * @param variables - Variable map mutated in place.
@@ -808,15 +822,105 @@ export function applyPassageEntryEffects(
   variables: VariableMap,
   ctx: StoryEngineContext,
 ): void {
-  const effectSource = resolveIfMacrosForEffects(content, variables, ctx);
-  // Register (fn:) definitions first so later (set: ... (call:"name"))
-  // in the same passage can execute correctly during entry effects.
+  // Register all (fn:) definitions up-front so that (set: $x to (call:"f"))
+  // anywhere in this passage can call them during sequential processing.
   const sourceWithoutFunctions = extractAndRegisterFunctions(
-    effectSource,
+    content,
     ctx.functions,
   );
-  applySetMacros(sourceWithoutFunctions, variables, ctx);
-  applyPointMacros(sourceWithoutFunctions, variables);
+
+  const linkActionRanges = findLinkActionRanges(sourceWithoutFunctions);
+  let cursor = 0;
+
+  while (cursor < sourceWithoutFunctions.length) {
+    // Skip whitespace / plain text until the next `(` that starts a macro.
+    const nextParen = sourceWithoutFunctions.indexOf("(", cursor);
+    if (nextParen === -1) break;
+
+    if (isWithinRanges(nextParen, linkActionRanges)) {
+      cursor = nextParen + 1;
+      continue;
+    }
+
+    const rest = sourceWithoutFunctions.slice(nextParen);
+    const lower = rest.toLowerCase();
+
+    // --- (set: $x to expr) ---
+    if (lower.startsWith("(set:")) {
+      const parsed = readBalancedBlock(
+        sourceWithoutFunctions,
+        nextParen,
+        "(",
+        ")",
+      );
+      if (!parsed) {
+        cursor = nextParen + 1;
+        continue;
+      }
+      const m = parsed.content
+        .trim()
+        .match(/^set:\s*(\$[A-Za-z_][A-Za-z0-9_]*)\s+to\s+([\s\S]+)$/i);
+      if (m) {
+        variables[m[1].slice(1)] = evaluateExpression(
+          m[2].trim(),
+          variables,
+          ctx,
+        );
+      }
+      cursor = parsed.endIndex;
+      continue;
+    }
+
+    // --- (if: ...) [...] (else-if: ...) [...] (else:) [...] ---
+    if (lower.startsWith("(if:")) {
+      const parsed = consumeIfMacro(sourceWithoutFunctions, nextParen);
+      if (!parsed) {
+        cursor = nextParen + 1;
+        continue;
+      }
+      let selectedBranch = "";
+      for (const branch of parsed.branches) {
+        if (branch.condition === null) {
+          selectedBranch = branch.branch;
+          break;
+        }
+        if (evaluateCondition(branch.condition, variables, ctx)) {
+          selectedBranch = branch.branch;
+          break;
+        }
+      }
+      if (selectedBranch) {
+        // Recurse so nested set/if inside the selected branch are also applied.
+        applyPassageEntryEffects(selectedBranch, variables, ctx);
+      }
+      cursor = parsed.fullEndIndex;
+      continue;
+    }
+
+    // --- (point: ...) ---
+    if (lower.startsWith("(point:")) {
+      const parsed = readBalancedBlock(
+        sourceWithoutFunctions,
+        nextParen,
+        "(",
+        ")",
+      );
+      if (!parsed) {
+        cursor = nextParen + 1;
+        continue;
+      }
+      const m = parsed.content.trim().match(/^point:\s*([\s\S]+)$/i);
+      if (m) {
+        const marker = parseSpecialMarker(m[1]);
+        if (marker) queuePointMarker(variables, marker);
+      }
+      cursor = parsed.endIndex;
+      continue;
+    }
+
+    // Not a macro we handle here — advance past this `(`.
+    cursor = nextParen + 1;
+  }
 }
 
 /** Tags treated as raw HTML block wrappers by the markdown renderer. */
@@ -1605,9 +1709,6 @@ export function renderStoryText(
   },
 ): string {
   const applyEntry = options?.applyEntryEffects ?? true;
-  const conditionVariables = cloneRenderVariables(
-    options?.renderVariables ?? variables,
-  );
   const hasExplicitRenderVariables = options?.renderVariables !== undefined;
   const renderVariables = cloneRenderVariables(
     options?.renderVariables ?? variables,
@@ -1620,6 +1721,13 @@ export function renderStoryText(
     }
   }
   transferPointQueueToRenderVariables(variables, renderVariables);
+
+  // Snapshot conditionVariables *after* entry effects so that top-level
+  // (set:) macros that precede an (if:) in the same passage are visible
+  // when the (if:) condition is evaluated during rendering.
+  const conditionVariables = hasExplicitRenderVariables
+    ? cloneRenderVariables(options!.renderVariables!)
+    : cloneRenderVariables(renderVariables);
 
   return renderStoryTextInternal(input, renderVariables, story, ctx, {
     consumePointQueue: true,
