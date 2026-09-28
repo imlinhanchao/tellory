@@ -165,6 +165,14 @@
                 <button class="btn btn-ghost btn-xs" @click="previewStory(progressRouteKey(p), p.status)">
                   <Icon icon="mdi:book-open-variant" />
                 </button>
+                <button
+                  v-if="getCombinedProgress(p).percent === 100"
+                  class="btn btn-ghost btn-xs"
+                  @click="openGraphFromProgress(p)"
+                  title="查看段落关系图"
+                >
+                  <Icon icon="mdi:graph-outline" />
+                </button>
               </h4>
               <span class="badge badge-sm" :class="p.isPlaying ? 'badge-primary' : 'badge-ghost'">
                 {{ p.isPlaying ? "正在阅读" : "已读" }}
@@ -339,6 +347,45 @@
     </form>
   </dialog>
 
+  <!-- 段落关系图弹窗（在阅读记录中，完成后可查看） -->
+  <dialog ref="graphRef" class="modal">
+    <div class="modal-box max-w-6xl w-full p-2">
+      <div class="mb-2 flex items-center justify-between px-2 pt-1">
+        <h3 class="flex items-center gap-2 text-lg font-bold">
+          <Icon icon="mdi:graph-outline" class="text-xl text-primary" />
+          段落关系图
+        </h3>
+        <div class="flex items-center gap-1">
+          <div class="tooltip tooltip-bottom" :data-tip="graphFullscreen ? '退出全屏' : '全屏显示'">
+            <button
+              class="btn btn-sm btn-circle btn-ghost"
+              type="button"
+              @click="toggleGraphFullscreen"
+            >
+              <Icon :icon="graphFullscreen ? 'mdi:fullscreen-exit' : 'mdi:fullscreen'" size="16px" />
+            </button>
+          </div>
+          <form method="dialog">
+            <button class="btn btn-sm btn-circle btn-ghost" type="submit">
+              <Icon icon="mdi:close" size="16px" />
+            </button>
+          </form>
+        </div>
+      </div>
+
+      <div :class="{ grow: graphFullscreen }" style="min-height:0;">
+        <StoryGraph
+          :story="graphStory"
+          :height="graphFullscreen ? '100%' : '68vh'"
+        />
+      </div>
+      <p class="mt-2 px-2 text-xs text-base-content/50">滚轮缩放，拖拽平移。</p>
+    </div>
+    <form method="dialog" class="modal-backdrop">
+      <button type="submit">close</button>
+    </form>
+  </dialog>
+
   <!-- 编辑资料弹窗 -->
   <dialog ref="editProfileModalRef" class="modal">
     <div class="modal-box max-w-120 w-full">
@@ -422,6 +469,9 @@ import { Icon } from "@iconify/vue";
 import request from "@/utils/http";
 import msg from "@/components/msg";
 import { User } from "@/api/auth";
+import StoryGraph from "@/components/StoryGraph";
+import { getStory } from "@/api/stories";
+import { parseStorySource } from "tellory";
 
 const route = useRoute();
 const router = useRouter();
@@ -501,6 +551,26 @@ function closeUnlockModal() {
   const dlg = unlockModalRef.value;
   if (dlg && dlg.open) dlg.close();
 }
+
+// Graph modal for completed stories in reading progress
+const graphRef = ref<HTMLDialogElement | null>(null);
+const graphStory = ref<any | null>(null);
+const graphFullscreen = ref(false);
+
+const openGraphFromProgress = async (p: any) => {
+  if (!p?.storyId) return;
+  try {
+    const res = await getStory(p.storyId);
+    graphStory.value = parseStorySource(res.content);
+    graphFullscreen.value = false;
+    graphRef.value?.showModal();
+  } catch (e) {
+    // 错误由 http 层处理提示
+  }
+};
+
+const closeGraph = () => graphRef.value?.close();
+const toggleGraphFullscreen = () => (graphFullscreen.value = !graphFullscreen.value);
 
 function getCombinedProgress(p: any) {
   const unlocked = (p.points || []).length + (p.end || []).length;
