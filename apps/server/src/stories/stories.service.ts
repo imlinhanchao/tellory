@@ -240,7 +240,7 @@ export class StoriesService {
     const authors = await this.usersService.getUsers(authorIds);
     return {
       data: data.map((story) => ({
-        ...omit(story, ['content']),
+        ...(omit(story, ['content']) as Omit<Story, 'content'>),
         tags: story.tags?.split(',') || [],
         author: authors.find((author) => author.id === story.authorId),
       })),
