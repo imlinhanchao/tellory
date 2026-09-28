@@ -15,6 +15,7 @@ import { OptionalAuthGuard } from '../auth/optional-auth.guard';
 import { AdminGuard } from '../auth/admin.guard';
 import { PlayService } from './play.service';
 import { UpdatePlayDto } from './play.dto';
+import { IPlayTrace } from './play.entity';
 import { StoriesService } from '../stories/stories.service';
 import { StoryRuntimeService } from '../stories/story-runtime.service';
 
@@ -80,8 +81,22 @@ export class PlayController {
     const decodedDataset = this.storyRuntimeService.decodeDataset(
       play.dataset || '',
     );
+    const trace =
+      play.trace && play.trace.length > 0
+        ? play.trace
+        : (play.history || []).map((h) => ({
+            from: h.from,
+            to: h.to,
+            action: h.action,
+            at: h.at,
+            type:
+              h.action === 'start'
+                ? ('start' as const)
+                : ('forward' as const),
+          }));
     return {
       ...play,
+      trace,
       story: story
         ? {
             id: story.id,
@@ -141,11 +156,21 @@ export class PlayController {
         passage: lastPlay.currentPassage,
         html: lastPlay.html,
         history: lastPlay.history || [],
+        trace: lastPlay.trace || [],
         variables: canAccessVariables ? lastPlay.variables : {},
       };
     }
 
     const runtime = this.storyRuntimeService.start(story.id, story.content);
+    const initialTrace: IPlayTrace[] = [
+      {
+        from: '',
+        to: runtime.passage,
+        action: 'start',
+        at: Date.now(),
+        type: 'start',
+      },
+    ];
     const payload = {
       storyId: id,
       userId: userId,
@@ -160,6 +185,7 @@ export class PlayController {
           variables: runtime.variables || {},
         },
       ],
+      trace: initialTrace,
       dataset: runtime.dataset,
       html: runtime.html,
     };
@@ -175,6 +201,7 @@ export class PlayController {
       passage: runtime.passage,
       html: created.html,
       history: [],
+      trace: created.trace || initialTrace,
       variables: canAccessVariables ? created.variables : {},
     };
   }
@@ -192,6 +219,7 @@ export class PlayController {
       passage: p.currentPassage,
       variables: isAuthorOrAdmin ? p.variables || {} : {},
       history: p.history || [],
+      trace: p.trace || [],
     };
   }
 
@@ -216,26 +244,54 @@ export class PlayController {
           ...p,
           variables: isAuthorOrAdmin ? p.variables || {} : {},
           history: prevHistory,
+          trace: p.trace || [],
         };
       }
 
       const rollbackHistory = prevHistory.slice(0, -1);
       const rollbackTo = rollbackHistory[rollbackHistory.length - 1];
+      const targetPassage = rollbackTo?.to || p.currentPassage;
+      const currentPassage = p.currentPassage;
+
       const displayedPassages = rollbackHistory
         .map((item) => this.extractDisplayTarget(item.action))
         .filter((item): item is string => Boolean(item));
 
       const runtimeRes = this.storyRuntimeService.rollback(
         p.dataset ?? '',
-        rollbackTo?.to || p.currentPassage,
+        targetPassage,
         (rollbackTo?.variables || p.variables || {}) as Record<string, unknown>,
         displayedPassages,
       );
+
+      const prevTrace: IPlayTrace[] =
+        p.trace && p.trace.length > 0
+          ? p.trace
+          : (prevHistory || []).map((h) => ({
+              from: h.from,
+              to: h.to,
+              action: h.action,
+              at: h.at,
+              type:
+                h.action === 'start'
+                  ? ('start' as const)
+                  : ('forward' as const),
+            }));
+
+      const backTraceEntry: IPlayTrace = {
+        from: currentPassage,
+        to: runtimeRes.passage,
+        action: 'back',
+        at: Date.now(),
+        type: 'back',
+      };
+      const newTrace = [...prevTrace, backTraceEntry];
 
       const updated = await this.playService.update(p.id, {
         currentPassage: runtimeRes.passage,
         variables: runtimeRes.variables as any,
         history: rollbackHistory,
+        trace: newTrace,
         dataset: runtimeRes.dataset,
         html: runtimeRes.html,
         isEnding: false,
@@ -248,6 +304,7 @@ export class PlayController {
         passage: runtimeRes.passage,
         variables: isAuthorOrAdmin ? updated.variables || {} : {},
         history: updated.history || [],
+        trace: updated.trace || newTrace,
         html: runtimeRes.html,
         end: null,
       };
@@ -286,6 +343,30 @@ export class PlayController {
         variables: runtimeRes.variables as any,
       };
       const newHistory = [...prevHistory, entry];
+
+      const prevTrace: IPlayTrace[] =
+        p.trace && p.trace.length > 0
+          ? p.trace
+          : (prevHistory || []).map((h) => ({
+              from: h.from,
+              to: h.to,
+              action: h.action,
+              at: h.at,
+              type:
+                h.action === 'start'
+                  ? ('start' as const)
+                  : ('forward' as const),
+            }));
+
+      const traceEntry: IPlayTrace = {
+        from: p.currentPassage,
+        to: runtimeRes.passage,
+        action: historyAction,
+        at: Date.now(),
+        type: 'forward',
+      };
+      const newTrace = [...prevTrace, traceEntry];
+
       let isEnding = false;
       let end: { name: string; description: string } | null = null;
       // 检查 render-specials（成就/结局），若有则记录为解锁
@@ -340,6 +421,7 @@ export class PlayController {
         currentPassage: runtimeRes.passage,
         variables: runtimeRes.variables as any,
         history: newHistory,
+        trace: newTrace,
         dataset: runtimeRes.dataset,
         html: runtimeRes.html,
         isEnding,
@@ -351,6 +433,7 @@ export class PlayController {
         passage: runtimeRes.passage,
         variables: isAuthorOrAdmin ? updated.variables || {} : {},
         history: updated.history || [],
+        trace: updated.trace || newTrace,
         html: runtimeRes.html,
         end,
       };

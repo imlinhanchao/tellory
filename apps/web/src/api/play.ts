@@ -68,6 +68,14 @@ export const getReaders = (storyId: string) => {
   });
 };
 
+export interface IPlayTrace {
+  from: string;
+  to: string;
+  action: string;
+  at: number;
+  type?: 'start' | 'forward' | 'back';
+}
+
 export interface IAdminPlayRow {
   id: string;
   storyId: string;
@@ -83,6 +91,7 @@ export interface IAdminPlayRow {
     at: number;
     variables?: Record<string, any>;
   }>;
+  trace?: IPlayTrace[];
   isEnding: boolean;
   createdAt: number;
   updatedAt: number;

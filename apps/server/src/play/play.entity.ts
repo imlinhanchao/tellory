@@ -29,6 +29,29 @@ export interface IHistory {
   variables?: Record<string, any>;
 }
 
+export interface IPlayTrace {
+  /**
+   * 上一段落名
+   */
+  from: string;
+  /**
+   * 下一段落名
+   */
+  to: string;
+  /**
+   * 玩家执行的动作或 'start' / 'back'
+   */
+  action: string;
+  /**
+   * 动作发生的时间戳
+   */
+  at: number;
+  /**
+   * 步骤类型：start (开始) | forward (前进) | back (撤回)
+   */
+  type?: 'start' | 'forward' | 'back';
+}
+
 @Entity({ name: 'story_play', comment: '玩家游玩会话/进度' })
 export class Play {
   @PrimaryGeneratedColumn('uuid')
@@ -52,8 +75,14 @@ export class Play {
   @Column('longtext', { comment: '加密的 runtime dataset', nullable: true })
   dataset?: string;
 
-  @Column('json', { comment: '段落历史（JSON 数组）' })
+  @Column('json', { comment: '段落历史（JSON 数组，主线记录）' })
   history: IHistory[] = [];
+
+  @Column('json', {
+    comment: '探索动线轨迹（JSON 数组，记录完整探索与撤回动线，不含变量）',
+    nullable: true,
+  })
+  trace: IPlayTrace[] = [];
 
   @Column({ comment: '是否抵达结局' })
   isEnding: boolean = false;

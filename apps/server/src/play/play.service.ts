@@ -33,6 +33,7 @@ export class PlayService {
       ...payload,
       variables: payload.variables ?? {},
       history: payload.history ?? [],
+      trace: payload.trace ?? [],
     });
     const saved = await this.playRepo.save(entity);
     return saved;
@@ -183,6 +184,7 @@ export class PlayService {
         'play.createdAt',
         'play.updatedAt',
         'play.history',
+        'play.trace',
       ])
       .where('play.createdAt <= :createdAt', { createdAt })
       .orderBy('play.createdAt', 'DESC')
