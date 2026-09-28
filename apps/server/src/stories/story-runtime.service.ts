@@ -143,18 +143,10 @@ export class StoryRuntimeService {
     const ctx = this.buildContext(state);
     const storyData = this.toStoryData(state);
 
-    // Render/detect with a pre-entry snapshot so `(if:)` conditions see the
-    // values from before entry-time `(set:)` effects ran. `renderStoryText`
-    // applies those effects to the persistent state when applyEntryEffects is
-    // true.
-    const renderVariables: Variables = JSON.parse(
-      JSON.stringify(state.variables),
-    );
-
-    // Detect specials first: renderStoryText consumes the point queue.
+    // Detect specials first (uses its own clone internally).
     const specials = detectRenderSpecials(
       passage.content,
-      renderVariables,
+      state.variables,
       storyData,
       ctx,
       {
@@ -163,12 +155,14 @@ export class StoryRuntimeService {
       },
     );
 
+    // renderStoryText applies entry effects to state.variables and renders
+    // with the post-entry snapshot so (if:) conditions see set values.
     const html = renderStoryText(
       passage.content,
       state.variables,
       storyData,
       ctx,
-      { applyEntryEffects, renderVariables },
+      { applyEntryEffects },
     );
 
     return {
