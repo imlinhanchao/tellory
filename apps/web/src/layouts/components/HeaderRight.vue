@@ -238,6 +238,12 @@
           </router-link>
         </li>
         <li>
+          <router-link :to="{ path: '/reading-history' }">
+            <Icon icon="mdi:book-clock-outline" class="w-4 h-4" />
+            阅读历史
+          </router-link>
+        </li>
+        <li>
           <router-link :to="{ path: '/beta-stories' }">
             <Icon icon="mdi:flask-outline" class="w-4 h-4" />
             内测故事

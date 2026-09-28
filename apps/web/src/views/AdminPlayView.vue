@@ -735,12 +735,23 @@
                       主线记录 ({{ detail.history?.length || 0 }})
                     </button>
                   </div>
-                  <div
-                    v-if="historyViewMode === 'trace' && rollbackCount > 0"
-                    class="badge badge-warning badge-soft badge-xs gap-1"
-                  >
-                    <Icon icon="mdi:undo-variant" class="w-3 h-3" />
-                    包含 {{ rollbackCount }} 次撤回
+                  <div class="flex items-center gap-2">
+                    <button
+                      v-if="currentTrace.length > 0 && detail.decodedDataset"
+                      type="button"
+                      class="btn btn-xs btn-outline btn-primary gap-1"
+                      @click="isTraceVisualizerOpen = true"
+                    >
+                      <Icon icon="mdi:motion-play-outline" class="w-3.5 h-3.5" />
+                      动线回放
+                    </button>
+                    <div
+                      v-if="historyViewMode === 'trace' && rollbackCount > 0"
+                      class="badge badge-warning badge-soft badge-xs gap-1"
+                    >
+                      <Icon icon="mdi:undo-variant" class="w-3 h-3" />
+                      包含 {{ rollbackCount }} 次撤回
+                    </div>
                   </div>
                 </div>
 
@@ -963,6 +974,31 @@
         <button>close</button>
       </form>
     </dialog>
+
+    <!-- 管理端全屏探索动线弹窗 -->
+    <dialog
+      ref="traceVisualizerDialogRef"
+      class="modal"
+      :class="{ 'modal-open': isTraceVisualizerOpen }"
+    >
+      <div class="modal-box w-screen max-w-none h-screen max-h-none rounded-none p-0 flex flex-col overflow-hidden bg-base-100">
+        <StoryTracePlayer
+          v-if="isTraceVisualizerOpen && detail && detail.decodedDataset"
+          :story="(detail.decodedDataset as any)"
+          :trace="currentTrace"
+          :point-size="1"
+          :end-size="1"
+          :user-points="[{ name: '*' }]"
+          :user-endings="[{ name: '*' }]"
+          :is-ending="detail.isEnding"
+          show-close-button
+          @close="isTraceVisualizerOpen = false"
+        />
+      </div>
+      <form method="dialog" class="modal-backdrop">
+        <button type="button" @click="isTraceVisualizerOpen = false">close</button>
+      </form>
+    </dialog>
   </div>
 </template>
 
@@ -973,6 +1009,7 @@ import Message from "@/components/msg";
 import msgbox from "@/components/msgbox";
 import Avatar from "@/components/Avatar";
 import { serializeStory, type StoryData } from "@/lib/storyEngine";
+import StoryTracePlayer from "@/components/StoryTrace/StoryTracePlayer.vue";
 import {
   adminDeletePlay,
   adminGetPlayDetail,
@@ -990,6 +1027,8 @@ const loading = ref(false);
 const detailLoading = ref(false);
 const detail = ref<IAdminPlayDetail | null>(null);
 const detailDialogRef = ref<HTMLDialogElement | null>(null);
+const isTraceVisualizerOpen = ref(false);
+const traceVisualizerDialogRef = ref<HTMLDialogElement | null>(null);
 const deletingId = ref("");
 
 type DetailTab = "visual" | "json";

@@ -31,6 +31,7 @@ interface RuntimeState {
   version: 1;
   storyId: string;
   title: string;
+  startPassage?: string;
   currentPassage: string;
   passages: Passage[];
   functions: Record<string, string>;
@@ -65,6 +66,7 @@ export class StoryRuntimeService {
         version: 1,
         storyId,
         title: parsed.title,
+        startPassage: parsed.startPassage,
         currentPassage: parsed.startPassage,
         passages: parsed.passages,
         functions: this.collectFunctions(parsed.passages),

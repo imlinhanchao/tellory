@@ -18,6 +18,7 @@ import { UpdatePlayDto } from './play.dto';
 import { IPlayTrace } from './play.entity';
 import { StoriesService } from '../stories/stories.service';
 import { StoryRuntimeService } from '../stories/story-runtime.service';
+import { parseStorySource } from 'tellory';
 
 @Controller('play')
 export class PlayController {
@@ -42,6 +43,77 @@ export class PlayController {
       userId,
       req.user?.userId == userId || req.user?.isAdmin || false,
     );
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('my-history')
+  async getMyHistory(@Request() req) {
+    return await this.playService.getUserUnlocksGrouped(req.user.userId, true);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('trace/:identifier')
+  async getPlayTrace(@Param('identifier') identifier: string, @Request() req) {
+    const userId = req.user?.userId;
+    const isAdmin = req.user?.isAdmin;
+    let play = await this.playService.findOne(identifier);
+
+    if (play) {
+      if (play.userId !== userId && !isAdmin) {
+        throw new Error('无权访问该游玩记录');
+      }
+    } else {
+      play = await this.playService.findLatestByStoryId(identifier, userId);
+    }
+
+    if (!play) {
+      throw new Error('未找到相关的游玩记录');
+    }
+
+    // 优先从 play.dataset 中解析出当时游玩的故事完整场景与状态（支持未发布/内测故事）
+    let decodedDataset: any = null;
+    if (play.dataset) {
+      decodedDataset = this.storyRuntimeService.decodeDataset(play.dataset);
+    }
+
+    // 若 dataset 缺失则从故事源回退加载
+    if (!decodedDataset && play.storyId) {
+      const story = await this.storiesService.findById(play.storyId, false);
+      if (story?.content) {
+        try {
+          const parsed = parseStorySource(story.content);
+          decodedDataset = {
+            title: parsed.title,
+            startPassage: parsed.startPassage,
+            passages: parsed.passages,
+          };
+        } catch {
+          // ignore
+        }
+      }
+    }
+
+    const trace =
+      play.trace && play.trace.length > 0
+        ? play.trace
+        : (play.history || []).map((h) => ({
+            from: h.from,
+            to: h.to,
+            action: h.action,
+            at: h.at,
+            type:
+              h.action === 'start' ? ('start' as const) : ('forward' as const),
+          }));
+
+    return {
+      playId: play.id,
+      storyId: play.storyId,
+      currentPassage: play.currentPassage,
+      isEnding: play.isEnding,
+      trace,
+      history: play.history || [],
+      decodedDataset,
+    };
   }
 
   @UseGuards(JwtAuthGuard)
@@ -90,9 +162,7 @@ export class PlayController {
             action: h.action,
             at: h.at,
             type:
-              h.action === 'start'
-                ? ('start' as const)
-                : ('forward' as const),
+              h.action === 'start' ? ('start' as const) : ('forward' as const),
           }));
     return {
       ...play,

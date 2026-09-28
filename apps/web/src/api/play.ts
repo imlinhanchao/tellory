@@ -56,10 +56,52 @@ export interface IUserStoryProgress {
   isPlaying: boolean;
   pointSize?: number | null;
   endSize?: number | null;
+  passageSize?: number | null;
+  play?: {
+    id: string;
+    currentPassage: string;
+    isEnding: boolean;
+    createdAt: number;
+    updatedAt: number;
+    history: Array<{
+      from: string;
+      to: string;
+      action: string;
+      at: number;
+      variables?: Record<string, any>;
+    }>;
+    trace: IPlayTrace[];
+  } | null;
 }
 
 export const getUserUnlocks = (userId: string) => {
   return request.get<IUserStoryProgress[]>({ url: `/play/unlocks/${userId}` });
+};
+
+export const getMyReadingHistory = () => {
+  return request.get<IUserStoryProgress[]>({ url: `/play/my-history` });
+};
+
+export interface IPlayTraceDetail {
+  playId: string;
+  storyId: string;
+  currentPassage: string;
+  isEnding: boolean;
+  trace: IPlayTrace[];
+  history: Array<{
+    from: string;
+    to: string;
+    action: string;
+    at: number;
+    variables?: Record<string, any>;
+  }>;
+  decodedDataset: any;
+}
+
+export const getPlayTraceDetail = (identifier: string) => {
+  return request.get<IPlayTraceDetail>({
+    url: `/play/trace/${identifier}`,
+  });
 };
 
 export const getReaders = (storyId: string) => {

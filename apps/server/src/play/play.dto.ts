@@ -25,4 +25,13 @@ export class PlayStoryDto extends BaseStoryFields {
   end: { name: string; description: string }[];
   status: string;
   isPlaying: boolean;
+  play?: {
+    id: string;
+    currentPassage: string;
+    isEnding: boolean;
+    createdAt: number;
+    updatedAt: number;
+    history: any[];
+    trace: any[];
+  } | null;
 }

@@ -142,6 +142,30 @@ export class PlayService {
       if (!story) continue;
       const latest = latestByStory.get(storyId);
       const isPlaying = !!latest && !latest.isEnding;
+      const playInfo = latest
+        ? {
+            id: latest.id,
+            currentPassage: latest.currentPassage,
+            isEnding: latest.isEnding,
+            createdAt: latest.createdAt,
+            updatedAt: latest.updatedAt,
+            history: latest.history || [],
+            trace:
+              latest.trace && latest.trace.length > 0
+                ? latest.trace
+                : (latest.history || []).map((h) => ({
+                    from: h.from,
+                    to: h.to,
+                    action: h.action,
+                    at: h.at,
+                    type:
+                      h.action === 'start'
+                        ? ('start' as const)
+                        : ('forward' as const),
+                  })),
+          }
+        : null;
+
       out.push({
         ...story,
         storyId,
@@ -149,6 +173,7 @@ export class PlayService {
         end: v.end,
         status: (story as Story).status || 'published',
         isPlaying,
+        play: playInfo,
       });
     }
     return out;
