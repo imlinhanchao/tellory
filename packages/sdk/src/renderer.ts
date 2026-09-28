@@ -972,7 +972,7 @@ export function renderMarkdownInline(input: string): string {
 
       const codePlaceholders: string[] = [];
       let working = segment.replace(/`([^`]+)`/g, (_full, code) => {
-        const placeholder = `__INLINE_CODE_${codePlaceholders.length}__`;
+        const placeholder = `$INLINE$CODE$${codePlaceholders.length}$`;
         codePlaceholders.push(`<code>${escapeHtmlText(code)}</code>`);
         return placeholder;
       });
@@ -1003,7 +1003,7 @@ export function renderMarkdownInline(input: string): string {
       );
 
       working = working.replace(
-        /__INLINE_CODE_(\d+)__/g,
+        /\$INLINE\$CODE\$(\d+)\$/g,
         (_full, index: string) => codePlaceholders[Number(index)] ?? "",
       );
       return working;

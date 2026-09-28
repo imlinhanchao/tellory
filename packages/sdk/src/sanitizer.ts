@@ -55,11 +55,7 @@ export const BLOCK_TAGS: Set<string> = new Set([
 ]);
 
 /** Tags whose inner newlines must be preserved verbatim (not converted to `<br>`). */
-export const PRESERVE_NEWLINE_TAGS: Set<string> = new Set([
-  "pre",
-  "code",
-  "textarea",
-]);
+export const PRESERVE_NEWLINE_TAGS: Set<string> = new Set(["code", "textarea"]);
 
 /**
  * Escapes `& < > " '` so `value` can be safely inserted as HTML text/attribute content.
