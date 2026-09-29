@@ -100,7 +100,7 @@ export const EDITOR_TOUR_STEPS: TourStep[] = [
     target: '[data-tour="btn-save"]',
     title: "保存到服务器（Ctrl/⌘ + S）",
     description:
-      "保存前会自动做一次语法检查。发现死链、孤立段落之类的问题会先列出来，由你决定是否继续保存。",
+      "保存前会自动做一次语法检查。发现死链、孤立段落之类的问题会先列出来，由你决定是否继续保存。点击保存按钮旁相连的向下小三角可展开自动定时保存设置。",
     placement: "bottom",
   },
   {

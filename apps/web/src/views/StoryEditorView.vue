@@ -342,24 +342,92 @@
                 </button>
               </div>
               <template v-if="!props.readOnly">
+                <!-- 保存按钮与自动保存选项（紧凑集成胶囊按钮） -->
                 <div
-                  class="tooltip tooltip-bottom"
-                  :data-tip="hasUnsavedChanges() ? '保存（有未保存修改）' : '保存至服务器'"
+                  class="inline-flex items-center h-8 rounded-full border border-base-300/80 bg-base-100/80 hover:border-base-content/25 transition-all shadow-2xs"
                   data-tour="btn-save"
                 >
-                  <button
-                    class="btn btn-sm btn-primary btn-ghost btn-circle relative"
-                    type="button"
-                    :disabled="syntaxChecking || saveInProgress"
-                    @click="saveToServer"
+                  <div
+                    class="tooltip tooltip-bottom h-full"
+                    :data-tip="hasUnsavedChanges() ? '保存（有未保存修改）' : '保存至服务器'"
                   >
-                    <Icon icon="mdi:content-save-outline" size="16px" />
-                    <span
-                      v-if="hasUnsavedChanges()"
-                      class="absolute top-1 right-1 w-2 h-2 rounded-full bg-warning ring-2 ring-base-100"
-                      title="有未保存修改"
-                    ></span>
-                  </button>
+                    <button
+                      class="h-8 pl-2.5 pr-1.5 flex items-center justify-center rounded-l-full text-primary hover:bg-primary/10 transition-colors relative cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                      type="button"
+                      :disabled="syntaxChecking || saveInProgress"
+                      @click="saveToServer"
+                    >
+                      <Icon icon="mdi:content-save-outline" size="16px" />
+                      <span
+                        v-if="hasUnsavedChanges()"
+                        class="absolute top-1 right-0.5 w-2 h-2 rounded-full bg-warning ring-1 ring-base-100"
+                        title="有未保存修改"
+                      ></span>
+                    </button>
+                  </div>
+                  <span class="w-px h-3.5 bg-base-content/15 shrink-0"></span>
+                  <details
+                    ref="autoSaveDropdownRef"
+                    class="dropdown dropdown-end h-full"
+                  >
+                    <summary
+                      class="h-8 pl-1 pr-1.5 min-w-0 flex items-center justify-center cursor-pointer list-none rounded-r-full hover:bg-base-content/10 transition-colors relative"
+                      :class="autoSaveEnabled ? 'text-primary' : 'text-base-content/40'"
+                      :title="autoSaveEnabled ? `自动定时保存：已开启 (${autoSaveIntervalSec}秒)` : '自动定时保存：已关闭'"
+                    >
+                      <Icon icon="mdi:menu-down" size="14px" />
+                      <span
+                        v-if="autoSaveEnabled"
+                        class="absolute bottom-1 right-0.5 w-1 h-1 rounded-full bg-success ring-1 ring-base-100"
+                      ></span>
+                    </summary>
+                    <div
+                      class="dropdown-content z-50 card card-compact w-64 p-3 shadow-xl bg-base-100 rounded-2xl border border-base-200 mt-2"
+                    >
+                      <div class="flex items-center justify-between pb-2 border-b border-base-200">
+                        <span class="font-bold text-sm flex items-center gap-1.5">
+                          <Icon icon="mdi:content-save-cog-outline" class="text-primary text-base" />
+                          自动定时保存
+                        </span>
+                        <span
+                          class="badge badge-xs"
+                          :class="autoSaveEnabled ? 'badge-success' : 'badge-ghost'"
+                        >
+                          {{ autoSaveEnabled ? '已开启' : '已关闭' }}
+                        </span>
+                      </div>
+
+                      <label class="label cursor-pointer justify-between py-2">
+                        <span class="label-text text-xs font-medium">启用定时自动保存</span>
+                        <input
+                          v-model="autoSaveEnabled"
+                          type="checkbox"
+                          class="toggle toggle-primary toggle-sm"
+                        />
+                      </label>
+
+                      <div v-if="autoSaveEnabled" class="space-y-1.5 pt-1.5 border-t border-base-200">
+                        <div class="flex items-center justify-between text-xs text-base-content/70">
+                          <span>保存间隔</span>
+                          <span class="font-mono text-primary font-medium">{{ autoSaveIntervalLabel }}</span>
+                        </div>
+                        <select
+                          v-model="autoSaveInterval"
+                          class="select select-bordered select-xs w-full"
+                        >
+                          <option :value="15000">15 秒</option>
+                          <option :value="30000">30 秒（默认）</option>
+                          <option :value="60000">1 分钟</option>
+                          <option :value="120000">2 分钟</option>
+                          <option :value="300000">5 分钟</option>
+                        </select>
+                      </div>
+
+                      <div class="text-[11px] text-base-content/50 pt-2 border-t border-base-200 mt-2 leading-relaxed">
+                        开启后，有未保存修改时将定时自动保存到草稿与服务器。
+                      </div>
+                    </div>
+                  </details>
                 </div>
                 <div
                   class="tooltip tooltip-bottom"
@@ -795,6 +863,7 @@ import type { TourStep } from "@/components/Tour/src/types";
 import { availableTourSteps } from "@/lib/editorTour";
 import { delay } from "@/utils";
 import StoryHistoryModal from "@/components/StoryHistory/StoryHistoryModal.vue";
+import { onClickOutside } from "@vueuse/core";
 
 const props = defineProps<{ readOnly?: boolean; initialStory?: any }>();
 
@@ -824,7 +893,32 @@ const showManual = ref(false);
 const appendMode = ref(true);
 const showAppendToggle = ref(false);
 
-const LOCAL_DRAFT_INTERVAL_MS = 30000;
+const AUTO_SAVE_STORAGE_KEY = "haide-story-editor-auto-save-enabled";
+const AUTO_SAVE_INTERVAL_KEY = "haide-story-editor-auto-save-interval";
+const DEFAULT_AUTO_SAVE_INTERVAL = 30000;
+
+const autoSaveDropdownRef = ref<HTMLDetailsElement | null>(null);
+const autoSaveEnabled = ref<boolean>(
+  localStorage.getItem(AUTO_SAVE_STORAGE_KEY) !== "false",
+);
+const autoSaveInterval = ref<number>(
+  (() => {
+    const saved = localStorage.getItem(AUTO_SAVE_INTERVAL_KEY);
+    const num = saved ? parseInt(saved, 10) : NaN;
+    return !isNaN(num) && num >= 5000 ? num : DEFAULT_AUTO_SAVE_INTERVAL;
+  })(),
+);
+
+const autoSaveIntervalSec = computed(() =>
+  Math.round(autoSaveInterval.value / 1000),
+);
+const autoSaveIntervalLabel = computed(() => {
+  const sec = autoSaveIntervalSec.value;
+  if (sec < 60) return `${sec} 秒`;
+  const min = Math.round(sec / 60);
+  return `${min} 分钟`;
+});
+
 let initVersion = 0;
 
 // 保存前的语法检查对话框状态
@@ -1766,6 +1860,42 @@ const saveTags = () => {
     .filter(Boolean);
 };
 
+const refreshAutoSave = () => {
+  stopAutoSave();
+  if (props.readOnly || !autoSaveEnabled.value) {
+    return;
+  }
+  startAutoSave(story, currentStoryId, {
+    intervalMs: autoSaveInterval.value,
+    readOnly: props.readOnly,
+    saveInProgressRef: saveInProgress,
+    onSaveToServer: async () => {
+      // 有 id 的直接定时存档
+      await performSave(true);
+    },
+  });
+};
+
+watch(autoSaveEnabled, (val) => {
+  try {
+    localStorage.setItem(AUTO_SAVE_STORAGE_KEY, String(val));
+  } catch {}
+  refreshAutoSave();
+});
+
+watch(autoSaveInterval, (val) => {
+  try {
+    localStorage.setItem(AUTO_SAVE_INTERVAL_KEY, String(val));
+  } catch {}
+  refreshAutoSave();
+});
+
+onClickOutside(autoSaveDropdownRef, () => {
+  if (autoSaveDropdownRef.value?.open) {
+    autoSaveDropdownRef.value.open = false;
+  }
+});
+
 onMounted(() => {
   // register global Ctrl/Cmd+S to trigger save
   globalKeydownHandler = (e: KeyboardEvent) => {
@@ -1782,15 +1912,7 @@ onMounted(() => {
     }
   };
   window.addEventListener('keydown', globalKeydownHandler);
-  startAutoSave(story, currentStoryId, {
-    intervalMs: LOCAL_DRAFT_INTERVAL_MS,
-    readOnly: props.readOnly,
-    saveInProgressRef: saveInProgress,
-    onSaveToServer: async () => {
-      // 有 id 的直接定时存档
-      await performSave(true);
-    },
-  });
+  refreshAutoSave();
 
   // 关闭或刷新网页前检查是否有未保存的更新
   beforeUnloadHandler = (e: BeforeUnloadEvent) => {
@@ -1802,10 +1924,10 @@ onMounted(() => {
   };
   window.addEventListener("beforeunload", beforeUnloadHandler);
 
-  // 页面切入后台时如有未保存更新则执行相应存档
+  // 页面切入后台时如有未保存更新且开启了自动保存则执行相应存档
   visibilityChangeHandler = () => {
     try {
-      if (props.readOnly) return;
+      if (props.readOnly || !autoSaveEnabled.value) return;
       if (document.visibilityState === "hidden" && hasUnsavedChanges()) {
         if (!currentStoryId.value) {
           saveLocalDraftNow();
