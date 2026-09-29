@@ -33,6 +33,7 @@ export const ALLOWED_HTML_TAGS: Set<string> = new Set([
 
 /** Block-level tags used to decide paragraph wrapping and newline trimming. */
 export const BLOCK_TAGS: Set<string> = new Set([
+  "style",
   "div",
   "p",
   "ul",
@@ -171,7 +172,7 @@ export function sanitizeAllowedHtml(
   const tagPattern = /<\/?([a-zA-Z0-9]+)(\s+[^>]*)?>/g;
   let lastIndex = 0;
   let result = "";
-  let lastWasOpeningBlock = false;
+  let lastWasBlock = false;
 
   for (const match of value.matchAll(tagPattern)) {
     const tagText = match[0];
@@ -180,15 +181,23 @@ export function sanitizeAllowedHtml(
     if (start < lastIndex) continue; // skip tags inside already-consumed ranges
 
     let before = value.slice(lastIndex, start);
-    // if previous was opening block tag, strip leading newlines/spaces to avoid leading <br>
-    if (lastWasOpeningBlock) {
+    // if previous was a block tag, strip leading newlines/spaces to avoid leading <br>
+    if (lastWasBlock) {
       before = before.replace(/^[ \t]*\n+[ \t]*/g, "");
     }
-    // if current tag is a closing block tag, strip trailing newlines/spaces to avoid trailing <br>
-    const isClosingBlock = /^<\//.test(tagText) && BLOCK_TAGS.has(tagName);
-    if (isClosingBlock) {
+    // if current tag is a block tag, strip trailing newlines/spaces to avoid trailing <br>
+    const isBlockTag = BLOCK_TAGS.has(tagName);
+    if (isBlockTag) {
       before = before.replace(/[ \t]*\n+[ \t]*$/g, "");
     }
+    before = before.replace(
+      /(\$(?:STYLE_BLOCK|HTML_FRAGMENT|MARKDOWN_STYLE)\$\d+\$)[ \t]*\n+[ \t]*/g,
+      "$1",
+    );
+    before = before.replace(
+      /[ \t]*\n+[ \t]*(\$(?:STYLE_BLOCK|HTML_FRAGMENT|MARKDOWN_STYLE)\$\d+\$)/g,
+      "$1",
+    );
     result += formatTextNode(before);
 
     // preserve entire <style>...</style> blocks without altering their content
@@ -202,6 +211,7 @@ export function sanitizeAllowedHtml(
         const endIdx = closeIdx + closeTag.length;
         result += value.slice(start, endIdx);
         lastIndex = endIdx;
+        lastWasBlock = true;
         continue;
       }
     }
@@ -221,6 +231,7 @@ export function sanitizeAllowedHtml(
         result += escapeHtmlText(inner);
         result += `</${tagName}>`;
         lastIndex = closeIdx + closeTag.length;
+        lastWasBlock = BLOCK_TAGS.has(tagName);
         continue;
       }
     }
@@ -232,10 +243,21 @@ export function sanitizeAllowedHtml(
     }
 
     lastIndex = start + tagText.length;
-    const isOpeningTag = !/^<\//.test(tagText) && BLOCK_TAGS.has(tagName);
-    lastWasOpeningBlock = isOpeningTag;
+    lastWasBlock = BLOCK_TAGS.has(tagName);
   }
 
-  result += formatTextNode(value.slice(lastIndex));
+  let remaining = value.slice(lastIndex);
+  if (lastWasBlock) {
+    remaining = remaining.replace(/^[ \t]*\n+[ \t]*/g, "");
+  }
+  remaining = remaining.replace(
+    /(\$(?:STYLE_BLOCK|HTML_FRAGMENT|MARKDOWN_STYLE)\$\d+\$)[ \t]*\n+[ \t]*/g,
+    "$1",
+  );
+  remaining = remaining.replace(
+    /[ \t]*\n+[ \t]*(\$(?:STYLE_BLOCK|HTML_FRAGMENT|MARKDOWN_STYLE)\$\d+\$)/g,
+    "$1",
+  );
+  result += formatTextNode(remaining);
   return result;
 }

@@ -16,6 +16,7 @@ export {
   detectRenderSpecials,
   renderStoryText,
   createDefaultEvaluator,
+  expandDisplayPassages,
 } from "./renderer";
 export { buildStandaloneExport } from "./standalone";
 export * from "./types";

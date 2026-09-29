@@ -324,6 +324,7 @@ export function applyStoryAction(
   action: string,
   variables: VariableMap,
   ctx: StoryEngineContext,
+  isCleaned = false,
 ): void {
   const normalized = action.trim();
   // Support multiple parenthesized actions concatenated together, e.g.
@@ -340,7 +341,7 @@ export function applyStoryAction(
       if (normalized[cursor] === "(") {
         const parsed = readBalancedBlock(normalized, cursor, "(", ")");
         if (!parsed) break;
-        applyStoryAction(parsed.content, variables, ctx);
+        applyStoryAction(parsed.content, variables, ctx, true);
         cursor = parsed.endIndex;
         continue;
       }
@@ -349,7 +350,9 @@ export function applyStoryAction(
     return;
   }
 
-  const cleaned = normalized.replace(/^\(+|\)+$/g, "").trim();
+  const cleaned = isCleaned
+    ? normalized
+    : normalized.replace(/^\(+|\)+$/g, "").trim();
 
   function executeCall(name: string, argsRaw?: string): unknown {
     const args = parseCallArgs(argsRaw, variables);
@@ -456,7 +459,10 @@ export function findLinkActionRanges(input: string): Array<[number, number]> {
     }
     if (input[afterIndex] === "(") {
       const block = readBalancedBlock(input, afterIndex, "(", ")");
-      if (block && /^\s*(?:(?:set|call|point):)/i.test(block.content)) {
+      if (
+        block &&
+        /^\s*(?:(?:set|call|point|display|goto):)/i.test(block.content)
+      ) {
         ranges.push([afterIndex, block.endIndex]);
       }
     }
@@ -475,6 +481,80 @@ export function isWithinRanges(
   ranges: Array<[number, number]>,
 ): boolean {
   return ranges.some(([start, end]) => index >= start && index < end);
+}
+
+/**
+ * Recursively inlines immediate (display: "Passage") macros that are not part
+ * of a deferred link action, guarding against recursive cycles.
+ *
+ * @param content - Raw passage content.
+ * @param story - Full story data containing all passages.
+ * @param visited - Set of passage names currently being expanded (for cycle detection).
+ * @returns Content with immediate (display:) macros replaced with target passage content.
+ */
+export function expandDisplayPassages(
+  content: string,
+  story?: StoryData,
+  visited: Set<string> = new Set(),
+): string {
+  if (!story || !content.includes("(display:")) {
+    return content;
+  }
+  const linkActionRanges = findLinkActionRanges(content);
+  let result = "";
+  let cursor = 0;
+  let searchFrom = 0;
+
+  while (searchFrom < content.length) {
+    const displayStart = content.indexOf("(display:", searchFrom);
+    if (displayStart === -1) break;
+
+    if (isWithinRanges(displayStart, linkActionRanges)) {
+      searchFrom = displayStart + 9;
+      continue;
+    }
+
+    const parsed = readBalancedBlock(content, displayStart, "(", ")");
+    if (!parsed) {
+      searchFrom = displayStart + 9;
+      continue;
+    }
+
+    const match = parsed.content
+      .trim()
+      .match(/^display:\s*(?:["']([^"']+)["']|([^\]\)\s]+))\s*$/i);
+    if (!match) {
+      searchFrom = parsed.endIndex;
+      continue;
+    }
+
+    const targetName = (match[1] ?? match[2]).trim();
+    result += content.slice(cursor, displayStart);
+
+    if (visited.has(targetName)) {
+      cursor = parsed.endIndex;
+      searchFrom = parsed.endIndex;
+      continue;
+    }
+
+    const targetPassage = story.passages.find((p) => p.name === targetName);
+    if (targetPassage) {
+      const nextVisited = new Set(visited);
+      nextVisited.add(targetName);
+      const expandedTarget = expandDisplayPassages(
+        targetPassage.content,
+        story,
+        nextVisited,
+      );
+      result += expandedTarget;
+    }
+
+    cursor = parsed.endIndex;
+    searchFrom = parsed.endIndex;
+  }
+
+  result += content.slice(cursor);
+  return result;
 }
 
 /**
@@ -816,16 +896,22 @@ export function renderEndingMarker(marker: StorySpecialMarker): string {
  * @param content - The entered passage's raw content.
  * @param variables - Variable map mutated in place.
  * @param ctx - The active engine context.
+ * @param story - Optional story data to expand (display:) macros.
  */
 export function applyPassageEntryEffects(
   content: string,
   variables: VariableMap,
   ctx: StoryEngineContext,
+  story?: StoryData,
 ): void {
+  const expandedContent = story
+    ? expandDisplayPassages(content, story)
+    : content;
+
   // Register all (fn:) definitions up-front so that (set: $x to (call:"f"))
   // anywhere in this passage can call them during sequential processing.
   const sourceWithoutFunctions = extractAndRegisterFunctions(
-    content,
+    expandedContent,
     ctx.functions,
   );
 
@@ -891,7 +977,7 @@ export function applyPassageEntryEffects(
       }
       if (selectedBranch) {
         // Recurse so nested set/if inside the selected branch are also applied.
-        applyPassageEntryEffects(selectedBranch, variables, ctx);
+        applyPassageEntryEffects(selectedBranch, variables, ctx, story);
       }
       cursor = parsed.fullEndIndex;
       continue;
@@ -925,6 +1011,7 @@ export function applyPassageEntryEffects(
 
 /** Tags treated as raw HTML block wrappers by the markdown renderer. */
 export const MARKDOWN_RAW_HTML_BLOCK_TAGS = new Set([
+  "style",
   "div",
   "section",
   "article",
@@ -1018,7 +1105,16 @@ export function renderMarkdownInline(input: string): string {
  * @returns HTML with block-level markdown syntax converted to tags.
  */
 export function renderMarkdownBlocks(input: string): string {
-  const lines = input.replace(/\r\n/g, "\n").split("\n");
+  const stylePlaceholders: string[] = [];
+  const normalizedInput = input.replace(
+    /<style\b[^>]*>[\s\S]*?<\/style>/gi,
+    (match) => {
+      const token = `$MARKDOWN_STYLE_${stylePlaceholders.length}$`;
+      stylePlaceholders.push(match);
+      return `\n\n${token}\n\n`;
+    },
+  );
+  const lines = normalizedInput.replace(/\r\n/g, "\n").split("\n");
   const output: string[] = [];
   const paragraphLines: string[] = [];
   const quoteLines: string[] = [];
@@ -1094,6 +1190,30 @@ export function renderMarkdownBlocks(input: string): string {
 
     if (!trimmed) {
       flushAllBlocks();
+      continue;
+    }
+
+    const isPlaceholder =
+      /^\$STYLE_BLOCK\$\d+\$$/.test(trimmed) ||
+      /^\$MARKDOWN_STYLE_\d+\$$/.test(trimmed) ||
+      /^\$HTML_FRAGMENT\$\d+\$$/.test(trimmed);
+    if (isPlaceholder) {
+      flushAllBlocks();
+      output.push(trimmed);
+      continue;
+    }
+
+    const singleLineHtmlBlockMatch = trimmed.match(
+      /^<([A-Za-z][\w:-]*)(\s[^>]*)?>[\s\S]*<\/\1>$/,
+    );
+    if (
+      singleLineHtmlBlockMatch &&
+      MARKDOWN_RAW_HTML_BLOCK_TAGS.has(
+        singleLineHtmlBlockMatch[1].toLowerCase(),
+      )
+    ) {
+      flushAllBlocks();
+      output.push(line);
       continue;
     }
 
@@ -1175,7 +1295,12 @@ export function renderMarkdownBlocks(input: string): string {
     output.push(rawHtmlLines.join("\n"));
   }
 
-  return output.join("\n");
+  let result = output.join("\n");
+  for (const [index, styleBlock] of stylePlaceholders.entries()) {
+    result = result.replace(`$MARKDOWN_STYLE_${index}$`, styleBlock);
+  }
+
+  return result;
 }
 
 interface ParsedIfMacroBranch {
@@ -1295,7 +1420,8 @@ export function replaceIfMacros(
     conditionVariables?: VariableMap;
   },
 ): string {
-  const conditionVariables = options?.conditionVariables ?? variables;
+  const conditionVariables =
+    options?.conditionVariables ?? cloneRenderVariables(variables);
   let result = "";
   let cursor = 0;
   let searchFrom = 0;
@@ -1310,7 +1436,9 @@ export function replaceIfMacros(
       continue;
     }
 
-    result += input.slice(cursor, ifStart);
+    const textBefore = input.slice(cursor, ifStart);
+    applySetMacros(textBefore, conditionVariables, ctx);
+    result += textBefore;
 
     let selected = "";
     for (const b of parsed.branches) {
@@ -1324,16 +1452,19 @@ export function replaceIfMacros(
       }
     }
 
-    result += renderStoryTextInternal(selected, variables, story, ctx, {
-      consumePointQueue: false,
-      conditionVariables,
-    });
+    if (selected) {
+      result += replaceIfMacros(selected, variables, story, ctx, {
+        conditionVariables,
+      });
+    }
 
     cursor = parsed.fullEndIndex;
     searchFrom = parsed.fullEndIndex;
   }
 
-  result += input.slice(cursor);
+  const textTail = input.slice(cursor);
+  applySetMacros(textTail, conditionVariables, ctx);
+  result += textTail;
   return result;
 }
 
@@ -1414,6 +1545,9 @@ export function replaceTextWithHtml(
   });
 
   working = extractAndRegisterFunctions(working, ctx.functions);
+  working = replaceIfMacros(working, variables, story, ctx, {
+    conditionVariables: options?.conditionVariables,
+  });
   working = stripSetMacros(working);
 
   const pointBlocks = findStandaloneSpecialBlocks(working, "point");
@@ -1484,10 +1618,6 @@ export function replaceTextWithHtml(
       return escapeHtmlText(String(result ?? ""));
     },
   );
-
-  working = replaceIfMacros(working, variables, story, ctx, {
-    conditionVariables: options?.conditionVariables,
-  });
 
   const displayPattern = /\(display:\s*["']([^"']+)["']\s*\)/g;
   working = working.replace(displayPattern, (_all, targetName: string) => {
@@ -1596,9 +1726,10 @@ export function detectRenderSpecials(
   try {
     const renderVariables = cloneRenderVariables(variables);
     const shouldApplyEntryEffects = options?.applyEntryEffects ?? true;
+    const expandedInput = expandDisplayPassages(input, story);
     if (shouldApplyEntryEffects) {
       const effectVariables = cloneRenderVariables(variables);
-      applyPassageEntryEffects(input, effectVariables, ctx);
+      applyPassageEntryEffects(expandedInput, effectVariables, ctx, story);
       const queuedPoints = readPointQueue(effectVariables);
       if (queuedPoints.length) {
         writePointQueue(renderVariables, queuedPoints);
@@ -1606,9 +1737,11 @@ export function detectRenderSpecials(
     }
 
     const specials: StoryRenderSpecials = { points: [] };
-    renderStoryTextInternal(input, renderVariables, story, ctx, {
+    const conditionVariables = cloneRenderVariables(variables);
+    renderStoryTextInternal(expandedInput, renderVariables, story, ctx, {
       consumePointQueue: false,
       captureSpecials: specials,
+      conditionVariables,
     });
     // Optionally detect any (point: ...) that are attached to links (deferred until click).
     // Only include them when `options.includeLinkActions` is true, or when a specific
@@ -1680,14 +1813,9 @@ export function detectRenderSpecials(
 /**
  * Renders a passage's raw content into sanitized HTML, expanding all supported macros.
  *
- * The render pass always reads a pre-entry snapshot of `variables` so that
- * `(if: ...)` conditions see the values from before any `(set: ...)` entry
- * effects ran. When `applyEntryEffects` is `true` (the default), entry-time
- * side effects are applied to the persistent `variables` map first, and any
- * `(point:)` markers they queue are moved into the render snapshot before
- * rendering. Callers that already ran entry effects can pass
- * `applyEntryEffects: false`; pass `renderVariables` to re-render with a
- * specific snapshot (e.g. for display expansion).
+ * The render pass reads a pre-entry snapshot of `variables` and advances it in
+ * document order so that `(if: ...)` conditions see values as they exist at that
+ * point in the passage.
  *
  * @param input - Raw passage content.
  * @param variables - Current variable map (mutated by entry effects when enabled).
@@ -1710,26 +1838,24 @@ export function renderStoryText(
 ): string {
   const applyEntry = options?.applyEntryEffects ?? true;
   const hasExplicitRenderVariables = options?.renderVariables !== undefined;
-  const renderVariables = cloneRenderVariables(
+  const preEntryVariables = cloneRenderVariables(
     options?.renderVariables ?? variables,
   );
+  const renderVariables = cloneRenderVariables(preEntryVariables);
+
+  const expandedInput = expandDisplayPassages(input, story);
 
   if (applyEntry) {
-    applyPassageEntryEffects(input, variables, ctx);
+    applyPassageEntryEffects(expandedInput, variables, ctx, story);
     if (!hasExplicitRenderVariables) {
       Object.assign(renderVariables, cloneRenderVariables(variables));
     }
   }
   transferPointQueueToRenderVariables(variables, renderVariables);
 
-  // Snapshot conditionVariables *after* entry effects so that top-level
-  // (set:) macros that precede an (if:) in the same passage are visible
-  // when the (if:) condition is evaluated during rendering.
-  const conditionVariables = hasExplicitRenderVariables
-    ? cloneRenderVariables(options!.renderVariables!)
-    : cloneRenderVariables(renderVariables);
+  const conditionVariables = cloneRenderVariables(preEntryVariables);
 
-  return renderStoryTextInternal(input, renderVariables, story, ctx, {
+  return renderStoryTextInternal(expandedInput, renderVariables, story, ctx, {
     consumePointQueue: true,
     conditionVariables,
   });

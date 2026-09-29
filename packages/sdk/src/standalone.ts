@@ -57,6 +57,7 @@ import {
   renderStoryText,
   isWithinRanges,
   renderStoryTextInternal,
+  expandDisplayPassages,
 } from "./renderer";
 import { buildInitialVariables } from "./parser";
 
@@ -107,6 +108,7 @@ const HELPER_ORDER = [
   "applySetMacros",
   "stripSetMacros",
   "isWithinRanges",
+  "expandDisplayPassages",
   "applyPassageEntryEffects",
   "renderMarkdownInline",
   "renderMarkdownBlocks",
@@ -145,6 +147,7 @@ const HELPER_MAP: Record<(typeof HELPER_ORDER)[number], unknown> = {
   evaluateCondition,
   parseSpecialMarker,
   isWithinRanges,
+  expandDisplayPassages,
   readPointQueue,
   writePointQueue,
   queuePointMarker,

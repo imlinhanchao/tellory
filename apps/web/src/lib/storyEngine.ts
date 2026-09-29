@@ -212,8 +212,9 @@ export function createEmptyStory(): StoryData {
 export function applyPassageEntryEffects(
   content: string,
   variables: VariableMap,
+  story?: StoryData,
 ): void {
-  sdkApplyPassageEntryEffects(content, variables, engineCtx);
+  sdkApplyPassageEntryEffects(content, variables, engineCtx, story);
 }
 
 function decodeHTMLEntities(str: string) {
