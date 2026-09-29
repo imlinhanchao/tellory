@@ -28,10 +28,6 @@ export default defineConfig({
   server: {
     allowedHosts: true,
     proxy: {
-      "/api/upload": {
-        target: "http://localhost:7532", // Upload service
-        changeOrigin: true,
-      },
       "/api": {
         target: "http://localhost:3000",
         changeOrigin: true,

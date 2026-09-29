@@ -78,58 +78,33 @@ export async function uploadFiles(
     form.append('files', f);
   }
 
-  // ensure api key on profile
-  let key = auth.getUser?.uploadKey;
-  if (!key) {
-    await auth.loadProfile();
-    key = auth.getUser?.uploadKey;
-  }
+  const token = auth.getToken;
 
-  const handleErrorCode = (code: number, msg?: string) => {
-    let friendly = msg || '上传失败';
-    switch (code) {
-      case 40001:
-        friendly = '参数缺失或未选择文件，请检查后重试。';
-        break;
-      case 40002:
-        friendly = '文件过大，单个文件需小于 1MB。';
-        break;
-      case 40101:
-        friendly = '缺少或无效的上传 Key，请登录后重试。';
-        break;
-      case 40102:
-        friendly = '上传 Key 已过期，请稍候重试。';
-        break;
-      case 50001:
-        friendly = '远程上传失败，请稍后重试。';
-        break;
-      case 50002:
-        friendly = '服务器数据库异常，请稍后重试。';
-        break;
-    }
-    return friendly;
-  };
-
-  const doXhr = (xKey?: string) =>
+  const doXhr = () =>
     new Promise<any>((resolve, reject) => {
       const xhr = new XMLHttpRequest();
-      try { options?.onXhr?.(xhr); } catch {}
+      try {
+        options?.onXhr?.(xhr);
+      } catch {}
       xhr.open('POST', '/api/upload', true);
-      if (xKey) {
-        try {
-          xhr.setRequestHeader('x-api-key', xKey);
-        } catch {}
+
+      if (token) {
+        xhr.setRequestHeader('Authorization', `Bearer ${token}`);
       }
 
       xhr.upload.onprogress = (ev) => {
         if (ev.lengthComputable) {
           const percent = Math.round((ev.loaded / ev.total) * 100);
-          try { options?.onProgress?.(percent, ev.loaded, ev.total); } catch {}
+          try {
+            options?.onProgress?.(percent, ev.loaded, ev.total);
+          } catch {}
         }
       };
 
       xhr.upload.onloadend = () => {
-        try { options?.onProcessing?.(); } catch {}
+        try {
+          options?.onProcessing?.();
+        } catch {}
       };
 
       xhr.onload = async () => {
@@ -151,29 +126,17 @@ export async function uploadFiles(
       xhr.send(form);
     });
 
-  // first try
-  let json: any = await doXhr(key);
+  const json: any = await doXhr();
   if (!json) {
     const err = '上传请求无响应';
     Message.error(err);
     throw new Error(err);
   }
 
-  // handle expired key by refreshing profile and retrying once
-  if (json.code === 40102) {
-    Message.error(handleErrorCode(json.code, json.message));
-    await auth.loadProfile();
-    const newKey = auth.getUser?.uploadKey;
-    if (newKey && newKey !== key) {
-      json = await doXhr(newKey);
-    }
-  }
-
-  if (!json || json.code !== 0) {
-    const code = json?.code;
-    const friendly = code ? handleErrorCode(code, json?.message) : '上传失败';
-    Message.error(friendly);
-    throw new Error(friendly);
+  if (json.code !== 0) {
+    const msg = json?.msg || json?.message || '上传失败';
+    Message.error(msg);
+    throw new Error(msg);
   }
 
   return json.data;

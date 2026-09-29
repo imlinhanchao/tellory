@@ -12,6 +12,7 @@ import { CommentModule } from './comment/comment.module';
 import { NotificationModule } from './notification/notification.module';
 import { ConfigModule } from './config/config.module';
 import { OperationLogModule } from './operation-log/operation-log.module';
+import { UploadModule } from './upload/upload.module';
 import { join } from 'path';
 
 @Module({
@@ -34,6 +35,7 @@ import { join } from 'path';
         CommentModule,
         NotificationModule,
         OperationLogModule,
+        UploadModule,
       ]
     : [ConfigModule],
   controllers: [AppController],

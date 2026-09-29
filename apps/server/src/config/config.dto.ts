@@ -11,6 +11,8 @@ export interface ConfigData {
   jwtSecret: string;
   salt: string;
   upload?: string;
+  uploadKey?: string;
+  uploadUrl?: string;
   github: {
     clientId: string;
     clientSecret: string;

@@ -106,7 +106,7 @@
         </button>
       </div>
 
-      <div v-if="userInfo.uploadKey" class="inline md:tooltip tooltip-bottom" data-tip="上传图片并以 Markdown 插入（支持粘贴）" data-tour="tool-upload">
+      <div class="inline md:tooltip tooltip-bottom" data-tip="上传图片并以 Markdown 插入（支持粘贴）" data-tour="tool-upload">
         <button class="btn btn-sm btn-ghost btn-square" type="button" @click="onUploadClick">
           <Icon icon="mdi:image" class="text-lg" />
         </button>
@@ -828,10 +828,6 @@ let currentXhr: XMLHttpRequest | null = null;
 
 function onUploadClick() {
   if (props.readOnly) return;
-  if (!userInfo.uploadKey) {
-    Message.error('缺少上传凭证，无法上传图片。');
-    return;
-  }
   fileInput.value?.click();
 }
 
@@ -866,10 +862,6 @@ function getClipboardImageFiles(event: ClipboardEvent): File[] {
 
 async function uploadAndInsertImages(files: File[]) {
   if (!files.length) return;
-  if (!userInfo.uploadKey) {
-    Message.error('缺少上传凭证，无法上传图片。');
-    return;
-  }
 
   try {
     const compressed = await Promise.all(files.map(compressIfNeeded));

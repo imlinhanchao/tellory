@@ -13,7 +13,7 @@ import {
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { UsersService } from './users.service';
 import { User } from './user.entity';
-import { omit, getDomain, getUploadKeyForUser } from 'src/utils';
+import { omit, getDomain } from 'src/utils';
 
 @Controller('users')
 export class UsersController {
@@ -24,9 +24,8 @@ export class UsersController {
   async getProfile(@Request() req) {
     const user = await this.usersService.findById(req.user.userId);
     if (!user) throw new Error('用户不存在');
-    const key = await getUploadKeyForUser(user.username);
 
-    return { ...omit(user, User.unsafeKey), uploadKey: key ?? '' };
+    return omit(user, User.unsafeKey);
   }
 
   /** 更新当前用户资料（昵称、邮箱） */

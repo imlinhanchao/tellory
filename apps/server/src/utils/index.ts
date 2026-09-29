@@ -1,6 +1,5 @@
 import path from 'path';
 import fs from 'fs';
-import { ConfigService } from 'src/config/config.service';
 
 export const configPath = path.resolve(__dirname, '../../config.json');
 
@@ -33,33 +32,3 @@ export function getHost(req: any): string {
 }
 
 export const getOrigin = getDomain;
-
-/**
- * 请求 upload 服务生成上传用的短期 API Key
- * 返回 key 字符串或 null
- */
-export async function getUploadKeyForUser(
-  username: string,
-): Promise<string | null> {
-  const upload = ConfigService.get('upload');
-  if (!upload) return null;
-
-  const from = 'tellory';
-  try {
-    const base = String(upload).replace(/\/$/, '');
-    const res = await fetch(`${base}/api/key`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, from }),
-    });
-    const body = await res.text();
-    const json = JSON.parse(body);
-    if (json && json.code === 0 && json.data && json.data.key) {
-      return String(json.data.key);
-    }
-  } catch (err) {
-    // ignore and return null on failure
-    console.error(err);
-  }
-  return null;
-}
