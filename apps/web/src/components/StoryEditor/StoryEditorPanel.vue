@@ -889,7 +889,7 @@ async function uploadAndInsertImages(files: File[]) {
     for (const f of data.files) {
       const alt = f.originalName || f.storedName || '';
       const url = f.url || f.githubPath || '';
-      insertSnippet(`![${alt}](${url})`);
+      insertSnippet(`![](${url})`);
     }
     Message && Message.success && Message.success('图片上传并插入完成');
   } catch (err: any) {
