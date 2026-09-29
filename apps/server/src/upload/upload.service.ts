@@ -1,4 +1,5 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
+import { createHash } from 'crypto';
 import { ConfigService } from '../config/config.service';
 
 export interface IUploadFile {
@@ -24,7 +25,8 @@ export interface UploadResult {
 }
 
 function getExtensionFromMime(mime: string): string {
-  switch (mime) {
+  const cleanMime = (mime || '').split(';')[0].trim().toLowerCase();
+  switch (cleanMime) {
     case 'image/jpeg':
     case 'image/jpg':
       return 'jpg';
@@ -48,19 +50,25 @@ function getExtensionFromMime(mime: string): string {
   }
 }
 
-function ensureFilenameWithExtension(name: string, mime: string): string {
+function getExtension(name: string, mime: string): string {
   const cleanName = (name || '').trim();
   const lastDot = cleanName.lastIndexOf('.');
   if (lastDot > 0 && lastDot < cleanName.length - 1) {
-    const ext = cleanName.substring(lastDot + 1);
+    const ext = cleanName.substring(lastDot + 1).toLowerCase();
     // 扩展名必须是 1~16 位字母数字
     if (/^[a-zA-Z0-9]{1,16}$/.test(ext)) {
-      return cleanName;
+      return ext;
     }
   }
 
-  const extFromMime = getExtensionFromMime(mime) || 'png';
-  return cleanName ? `${cleanName}.${extFromMime}` : `image.${extFromMime}`;
+  return getExtensionFromMime(mime) || 'png';
+}
+
+function generateHashTimestampFilename(file: IUploadFile): string {
+  const hash = createHash('md5').update(file.buffer).digest('hex');
+  const timestamp = Date.now();
+  const ext = getExtension(file.originalname, file.mimetype);
+  return `${hash}.${timestamp}.${ext}`;
 }
 
 @Injectable()
@@ -130,10 +138,8 @@ export class UploadService {
     const blob = new Blob([file.buffer as any], {
       type: file.mimetype || 'application/octet-stream',
     });
-    const safeFilename = ensureFilenameWithExtension(
-      file.originalname,
-      file.mimetype,
-    );
+    // 文件名格式：hash.timestamp.ext
+    const safeFilename = generateHashTimestampFilename(file);
     form.append('file', blob, safeFilename);
 
     const targetUrl = `${baseUrl}/api/v1/files`;
