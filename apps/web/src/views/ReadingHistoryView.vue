@@ -2,17 +2,17 @@
   <div class="p-3 sm:p-6 space-y-4 sm:space-y-6 max-w-7xl mx-auto">
     <!-- 头部信息卡片 -->
     <div
-      class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 bg-base-100 p-4 sm:p-5 rounded-2xl border border-base-200/80 shadow-2xs"
+      class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-base-100 p-3.5 sm:p-4 rounded-xl border border-base-200/80 shadow-2xs"
     >
-      <div class="flex items-center gap-3">
+      <div class="flex items-center gap-2.5">
         <div
-          class="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0"
+          class="w-9 h-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0"
         >
-          <Icon icon="mdi:book-clock-outline" class="w-6 h-6" />
+          <Icon icon="mdi:book-clock-outline" class="w-5 h-5" />
         </div>
         <div class="min-w-0">
           <div class="flex items-center gap-2">
-            <h2 class="text-lg sm:text-xl font-bold text-base-content tracking-tight">我的阅读历史</h2>
+            <h2 class="text-base sm:text-lg font-bold text-base-content tracking-tight">我的阅读历史</h2>
             <span class="badge badge-primary badge-soft badge-xs">个人足迹</span>
           </div>
           <p class="text-xs text-base-content/60 mt-0.5 truncate sm:whitespace-normal">
@@ -21,14 +21,14 @@
         </div>
       </div>
 
-      <div class="flex items-center gap-3 text-xs text-base-content/60">
-        <div class="flex items-center gap-1.5 bg-base-200/50 px-3 py-1.5 rounded-xl">
-          <Icon icon="mdi:book-open-page-variant-outline" class="w-4 h-4 text-primary shrink-0" />
+      <div class="flex items-center gap-2.5 text-xs text-base-content/60 self-end sm:self-auto">
+        <div class="flex items-center gap-1.5 bg-base-200/50 px-2.5 py-1 rounded-lg">
+          <Icon icon="mdi:book-open-page-variant-outline" class="w-3.5 h-3.5 text-primary shrink-0" />
           <span>已读 <strong class="text-base-content font-semibold">{{ list.length }}</strong> 部故事</span>
         </div>
         <button
           type="button"
-          class="btn btn-ghost btn-sm btn-circle"
+          class="btn btn-ghost btn-xs btn-circle"
           :title="loading ? '刷新中' : '刷新阅读历史'"
           @click="loadHistory"
         >
@@ -38,24 +38,21 @@
     </div>
 
     <!-- 加载骨架屏 -->
-    <div v-if="loading && list.length === 0" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+    <div v-if="loading && list.length === 0" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
       <div
-        v-for="n in 6"
+        v-for="n in 8"
         :key="n"
-        class="card bg-base-100 border border-base-200/80 p-4 sm:p-5 rounded-2xl space-y-3"
+        class="card bg-base-100 border border-base-200/80 p-3.5 rounded-xl space-y-2.5"
       >
         <div class="flex justify-between items-start">
-          <div class="skeleton h-5 w-3/4"></div>
-          <div class="skeleton h-5 w-14 rounded-full"></div>
+          <div class="skeleton h-4 w-3/4"></div>
+          <div class="skeleton h-4 w-12 rounded-full"></div>
         </div>
-        <div class="skeleton h-12 w-full rounded-xl"></div>
-        <div class="grid grid-cols-2 gap-2">
-          <div class="skeleton h-8 w-full rounded-lg"></div>
-          <div class="skeleton h-8 w-full rounded-lg"></div>
-        </div>
-        <div class="flex justify-between items-center pt-2">
-          <div class="skeleton h-4 w-24"></div>
-          <div class="skeleton h-8 w-24 rounded-lg"></div>
+        <div class="skeleton h-7 w-full rounded-lg"></div>
+        <div class="skeleton h-9 w-full rounded-lg"></div>
+        <div class="flex justify-between items-center pt-1">
+          <div class="skeleton h-3.5 w-20"></div>
+          <div class="skeleton h-6 w-20 rounded-md"></div>
         </div>
       </div>
     </div>
@@ -63,29 +60,30 @@
     <!-- 阅读记录卡片列表 -->
     <div
       v-else-if="list.length > 0"
-      class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
+      class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3"
     >
       <div
         v-for="item in list"
         :key="item.storyId"
-        class="card bg-base-100 border border-base-200/80 hover:border-primary/40 rounded-2xl shadow-2xs hover:shadow-md transition-all duration-200 flex flex-col justify-between overflow-hidden"
+        class="card bg-base-100 border border-base-200/80 hover:border-primary/40 rounded-xl shadow-2xs hover:shadow-sm transition-all duration-200 flex flex-col justify-between overflow-hidden"
       >
-        <div class="card-body p-4 sm:p-5 space-y-3">
+        <div class="p-3.5 space-y-2.5">
           <!-- 故事标题与状态 -->
           <div class="flex items-start justify-between gap-2">
             <div class="min-w-0 flex-1">
               <h3
-                class="font-bold text-base text-base-content hover:text-primary transition-colors cursor-pointer truncate"
+                class="font-bold text-sm text-base-content hover:text-primary transition-colors cursor-pointer truncate leading-snug"
+                :title="item.title"
                 @click="openTrace(item)"
               >
                 {{ item.title || "未命名故事" }}
               </h3>
-              <p v-if="item.shortname" class="text-xs text-base-content/50 font-mono mt-0.5">
+              <p v-if="item.shortname" class="text-[11px] text-base-content/45 font-mono truncate mt-0.5">
                 {{ item.shortname }}
               </p>
             </div>
             <span
-              class="badge badge-sm shrink-0"
+              class="badge badge-xs shrink-0"
               :class="item.play?.isEnding ? 'badge-neutral' : 'badge-success badge-soft'"
             >
               {{ item.play?.isEnding ? "已完结" : "进行中" }}
@@ -93,93 +91,88 @@
           </div>
 
           <!-- 故事简介 -->
-          <p class="text-xs text-base-content/70 line-clamp-2 leading-relaxed min-h-8">
+          <p class="text-xs text-base-content/65 line-clamp-2 leading-relaxed">
             {{ item.description || "暂无故事描述" }}
           </p>
 
-          <!-- 成就与结局进度条 -->
-          <div class="p-2.5 rounded-xl bg-base-200/40 space-y-2 text-xs">
-            <!-- 成就达成状态 -->
-            <div class="flex items-center justify-between text-[11px]">
-              <span class="flex items-center gap-1 text-base-content/70">
-                <Icon icon="mdi:star-outline" class="w-3.5 h-3.5 text-primary" />
-                成就解锁
-              </span>
-              <span class="font-mono font-medium">
-                {{ item.points?.length || 0 }} / {{ item.pointSize || 0 }}
-              </span>
+          <!-- 成就与结局双栏紧凑进度条 -->
+          <div class="p-2 rounded-lg bg-base-200/40 space-y-1.5 text-xs">
+            <div class="grid grid-cols-2 gap-2 text-[11px]">
+              <div>
+                <div class="flex items-center justify-between text-[10px] text-base-content/70 mb-0.5">
+                  <span class="flex items-center gap-0.5">
+                    <Icon icon="mdi:star-outline" class="w-3 h-3 text-primary shrink-0" />
+                    成就
+                  </span>
+                  <span class="font-mono font-medium">{{ item.points?.length || 0 }}/{{ item.pointSize || 0 }}</span>
+                </div>
+                <progress
+                  class="progress progress-primary h-1 w-full"
+                  :value="item.points?.length || 0"
+                  :max="item.pointSize || 1"
+                ></progress>
+              </div>
+              <div>
+                <div class="flex items-center justify-between text-[10px] text-base-content/70 mb-0.5">
+                  <span class="flex items-center gap-0.5">
+                    <Icon icon="boxicons:flag-chequered" class="w-3 h-3 text-accent shrink-0" />
+                    结局
+                  </span>
+                  <span class="font-mono font-medium">{{ item.end?.length || 0 }}/{{ item.endSize || 0 }}</span>
+                </div>
+                <progress
+                  class="progress progress-accent h-1 w-full"
+                  :value="item.end?.length || 0"
+                  :max="item.endSize || 1"
+                ></progress>
+              </div>
             </div>
-            <progress
-              class="progress progress-primary h-1.5 w-full"
-              :value="item.points?.length || 0"
-              :max="item.pointSize || 1"
-            ></progress>
-
-            <!-- 结局达成状态 -->
-            <div class="flex items-center justify-between text-[11px]">
-              <span class="flex items-center gap-1 text-base-content/70">
-                <Icon icon="boxicons:flag-chequered" class="w-3.5 h-3.5 text-accent" />
-                结局解锁
-              </span>
-              <span class="font-mono font-medium">
-                {{ item.end?.length || 0 }} / {{ item.endSize || 0 }}
-              </span>
-            </div>
-            <progress
-              class="progress progress-accent h-1.5 w-full"
-              :value="item.end?.length || 0"
-              :max="item.endSize || 1"
-            ></progress>
 
             <!-- 全达成金色标识 -->
             <div
               v-if="checkHasCompletedAll(item)"
-              class="flex items-center gap-1 text-[11px] text-warning font-semibold pt-0.5"
+              class="flex items-center gap-1 text-[10px] text-warning font-semibold pt-0.5 border-t border-base-200/60"
             >
-              <Icon icon="mdi:trophy" class="w-3.5 h-3.5" />
-              <span>全成就与结局已达成（隐藏场景已解锁）</span>
+              <Icon icon="mdi:trophy" class="w-3 h-3 shrink-0" />
+              <span class="truncate">全成就与结局达成（已解锁隐藏场景）</span>
             </div>
           </div>
 
-          <!-- 游玩步数与当前位置元信息 -->
-          <div class="grid grid-cols-2 gap-2 text-xs">
-            <div class="bg-base-200/30 p-2 rounded-lg flex flex-col justify-center">
-              <span class="text-[10px] text-base-content/50 mb-0.5">当前位置</span>
-              <span class="font-mono text-xs font-medium truncate" :title="item.play?.currentPassage">
+          <!-- 当前位置与足迹紧凑行 -->
+          <div class="flex items-center justify-between text-[11px] text-base-content/60 pt-0.5">
+            <div class="flex items-center gap-1 min-w-0 flex-1 mr-2 truncate">
+              <Icon icon="mdi:map-marker-outline" class="w-3.5 h-3.5 text-base-content/40 shrink-0" />
+              <span class="truncate" :title="item.play?.currentPassage">
                 {{ item.play?.currentPassage || "起点" }}
               </span>
             </div>
-            <div class="bg-base-200/30 p-2 rounded-lg flex flex-col justify-center">
-              <span class="text-[10px] text-base-content/50 mb-0.5">探索足迹</span>
-              <div class="flex items-center gap-1 font-medium text-xs truncate">
-                <Icon icon="mdi:map-marker-path" class="w-3.5 h-3.5 text-primary shrink-0" />
-                <span>{{ item.play?.trace?.length || item.play?.history?.length || 0 }} 步动线</span>
-              </div>
+            <div class="flex items-center gap-1 shrink-0 font-mono text-primary font-medium">
+              <Icon icon="mdi:map-marker-path" class="w-3.5 h-3.5 shrink-0" />
+              <span>{{ item.play?.trace?.length || item.play?.history?.length || 0 }} 步</span>
             </div>
           </div>
         </div>
 
         <!-- 卡片底部时间与操作 -->
-        <div class="border-t border-base-200/80 px-4 sm:px-5 py-3 bg-base-200/20 flex items-center justify-between gap-2">
-          <span class="text-[11px] text-base-content/50 truncate flex items-center gap-1">
-            <Icon icon="mdi:clock-outline" class="w-3.5 h-3.5 shrink-0" />
+        <div class="border-t border-base-200/70 px-3.5 py-2 bg-base-200/20 flex items-center justify-between gap-2 text-xs">
+          <span class="text-[10px] text-base-content/45 truncate" :title="formatTime(item.play?.updatedAt || item.play?.createdAt)">
             {{ formatTime(item.play?.updatedAt || item.play?.createdAt) }}
           </span>
 
-          <div class="flex items-center gap-2 shrink-0">
+          <div class="flex items-center gap-1.5 shrink-0">
             <button
               type="button"
-              class="btn btn-sm btn-primary gap-1"
+              class="btn btn-xs btn-primary gap-1 font-normal h-6 min-h-6 px-2"
               @click="openTrace(item)"
             >
-              <Icon icon="mdi:map-marker-path" class="w-4 h-4" />
+              <Icon icon="mdi:map-marker-path" class="w-3.5 h-3.5" />
               探索动线
             </button>
             <router-link
               :to="item.status === 'published' ? `/play/${item.storyId}` : `/test/${item.storyId}`"
-              class="btn btn-sm btn-ghost gap-1"
+              class="btn btn-xs btn-ghost gap-0.5 font-normal h-6 min-h-6 px-1.5 text-base-content/70 hover:text-base-content"
             >
-              <Icon icon="mdi:play-outline" class="w-4 h-4" />
+              <Icon icon="mdi:play-outline" class="w-3.5 h-3.5" />
               {{ item.status === "published" ? "游玩" : "试玩" }}
             </router-link>
           </div>
