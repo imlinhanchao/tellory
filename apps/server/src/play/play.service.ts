@@ -167,7 +167,7 @@ export class PlayService {
         : null;
 
       out.push({
-        ...story,
+        ...(omit(story, ['content']) as Story),
         storyId,
         points: v.points,
         end: v.end,
