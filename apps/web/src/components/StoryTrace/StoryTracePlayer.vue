@@ -29,7 +29,7 @@
             </span>
             <span
               v-else
-              class="badge badge-neutral badge-soft badge-xs gap-1"
+              class="badge badge-soft badge-xs gap-1"
               :title="`探索模式：仅展示已走过的场景 (成就 ${userPointsCount}/${pointSize || 0}，结局 ${userEndingsCount}/${endSize || 0})`"
             >
               <Icon icon="mdi:compass-outline" class="w-3 h-3" />
@@ -148,14 +148,72 @@
 
         <g :transform="transform">
           <!-- 边 (Edges) -->
-          <template v-for="edge in layout.edges" :key="edge.id">
+          <g
+            v-for="edge in layout.edges"
+            :key="edge.id"
+            class="sg-edge-group cursor-pointer"
+            :class="{ 'sg-edge-selected': selectedEdgeId === edge.id }"
+            @click.stop="toggleEdgeSelection(edge)"
+          >
+            <!-- 扩大点击热区的透明粗线（方便鼠标与触屏点击） -->
             <path
-              class="transition-all duration-300"
+              fill="none"
+              stroke="transparent"
+              stroke-width="24"
+              stroke-linecap="round"
+              :d="edge.path"
+              class="cursor-pointer"
+            />
+
+            <!-- 实际可见的连线 -->
+            <path
+              fill="none"
+              class="sg-edge fill-none transition-all duration-300 pointer-events-none"
               :class="getEdgeClass(edge)"
               :d="edge.path"
               :marker-end="getEdgeMarker(edge)"
             />
-          </template>
+
+            <!-- 选中点亮后：在连接线上显示所作的操作 -->
+            <g
+              v-if="selectedEdgeId === edge.id"
+              class="sg-edge-badge select-none pointer-events-none transition-all duration-300"
+              :transform="`translate(${edge.labelX}, ${edge.labelY})`"
+            >
+              <!-- 胶囊光晕外框 -->
+              <rect
+                :x="-getBadgeWidth(edge) / 2 - 3"
+                :y="-15"
+                :width="getBadgeWidth(edge) + 6"
+                :height="30"
+                rx="15"
+                ry="15"
+                class="animate-pulse"
+                :class="getBadgeHaloClass(edge)"
+              />
+              <!-- 胶囊主体 -->
+              <rect
+                :x="-getBadgeWidth(edge) / 2"
+                :y="-13"
+                :width="getBadgeWidth(edge)"
+                :height="26"
+                rx="13"
+                ry="13"
+                :class="getBadgeRectClass(edge)"
+              />
+              <!-- 操作说明文字 -->
+              <text
+                x="0"
+                y="0"
+                text-anchor="middle"
+                dominant-baseline="central"
+                class="text-[11px] font-bold"
+                :class="getBadgeTextClass(edge)"
+              >
+                {{ getEdgeOperationInfo(edge).text }}
+              </text>
+            </g>
+          </g>
 
           <!-- 节点 (Nodes) -->
           <g
@@ -166,8 +224,21 @@
             :transform="`translate(${node.x} ${node.y})`"
             role="button"
             tabindex="0"
-            @click="onNodeClick(node)"
+            @click.stop="onNodeClick(node)"
           >
+            <!-- 选中连接线点亮场景的高亮外框/光晕动画 -->
+            <rect
+              v-if="isNodeConnectedToSelectedEdge(node.id)"
+              class="animate-pulse fill-primary/15 stroke-primary"
+              :x="-4"
+              :y="-4"
+              :width="node.width + 8"
+              :height="node.height + 8"
+              rx="16"
+              ry="16"
+              stroke-width="2.5"
+            />
+
             <!-- 节点矩形底框 -->
             <rect
               class="transition-colors duration-200"
@@ -186,6 +257,52 @@
               cy="13"
               r="3.5"
             />
+
+            <!-- 选中连接线时标识来源与走向的指示角标 -->
+            <g
+              v-if="selectedEdge && selectedEdge.source === node.id"
+              :transform="`translate(6, -9)`"
+              class="select-none pointer-events-none"
+            >
+              <rect
+                width="36"
+                height="17"
+                rx="8.5"
+                class="fill-info stroke-base-100"
+                stroke-width="1.5"
+              />
+              <text
+                x="18"
+                y="9.5"
+                text-anchor="middle"
+                dominant-baseline="central"
+                class="fill-info-content text-[9px] font-bold"
+              >
+                来源
+              </text>
+            </g>
+            <g
+              v-else-if="selectedEdge && selectedEdge.target === node.id"
+              :transform="`translate(6, -9)`"
+              class="select-none pointer-events-none"
+            >
+              <rect
+                width="36"
+                height="17"
+                rx="8.5"
+                class="fill-primary stroke-base-100"
+                stroke-width="1.5"
+              />
+              <text
+                x="18"
+                y="9.5"
+                text-anchor="middle"
+                dominant-baseline="central"
+                class="fill-primary-content text-[9px] font-bold"
+              >
+                目标
+              </text>
+            </g>
 
             <!-- 当前位置闪烁外环 -->
             <rect
@@ -277,6 +394,42 @@
         <span v-if="rollbackCount > 0" class="flex items-center gap-1.5 text-warning font-medium">
           <span class="w-2.5 h-0.5 bg-warning"></span>撤回回退
         </span>
+      </div>
+
+      <!-- 选中连接线时的悬浮提示横幅 -->
+      <div
+        v-if="selectedEdge"
+        class="absolute top-3 left-3 sm:left-4 z-20 flex items-center gap-2 bg-base-100/95 border border-primary/50 shadow-xl px-3.5 py-1.5 rounded-full text-xs backdrop-blur transition-all duration-200"
+      >
+        <span
+          class="w-2.5 h-2.5 rounded-full animate-ping shrink-0"
+          :class="getEdgeOperationInfo(selectedEdge).isBack ? 'bg-warning' : 'bg-primary'"
+        ></span>
+        <div class="flex items-center gap-1.5 font-mono text-base-content/80 text-[11px] truncate">
+          <span class="font-bold text-info">{{ selectedEdge.source }}</span>
+          <Icon
+            :icon="getEdgeOperationInfo(selectedEdge).isBack ? 'mdi:arrow-left' : 'mdi:arrow-right'"
+            class="w-3.5 h-3.5 shrink-0"
+            :class="getEdgeOperationInfo(selectedEdge).isBack ? 'text-warning' : 'text-primary'"
+          />
+          <span class="font-bold text-primary">{{ selectedEdge.target }}</span>
+        </div>
+        <span class="text-base-content/30">|</span>
+        <span
+          class="font-semibold text-xs"
+          :class="getEdgeOperationInfo(selectedEdge).isBack ? 'text-warning' : 'text-primary'"
+        >
+          操作：{{ getEdgeOperationInfo(selectedEdge).text }}
+        </span>
+        <span v-if="getEdgeOperationInfo(selectedEdge).detail" class="text-[10px] text-base-content/50 hidden md:inline">
+          ({{ getEdgeOperationInfo(selectedEdge).detail }})
+        </span>
+        <button
+          type="button"
+          class="btn btn-ghost btn-xs btn-circle ml-0.5 h-5 w-5 min-h-0 text-base-content/60 hover:text-base-content"
+          title="取消点亮"
+          @click="selectedEdgeId = null"
+        >✕</button>
       </div>
 
       <!-- 右上角当前步骤浮动详情卡片 -->
@@ -665,16 +818,190 @@ const getNodeLabel = (node: LaidOutNode) => {
   return node.label;
 };
 
+// ---- 连线点击选中与点亮场景交互 ---------------------------------------
+
+const selectedEdgeId = ref<string | null>(null);
+
+const selectedEdge = computed(() => {
+  if (!selectedEdgeId.value) return null;
+  return layout.value.edges.find((e) => e.id === selectedEdgeId.value) || null;
+});
+
+const isNodeConnectedToSelectedEdge = (nodeId: string) => {
+  if (!selectedEdge.value) return false;
+  return selectedEdge.value.source === nodeId || selectedEdge.value.target === nodeId;
+};
+
+const toggleEdgeSelection = (edge: LaidOutEdge) => {
+  if (selectedEdgeId.value === edge.id) {
+    selectedEdgeId.value = null;
+  } else {
+    selectedEdgeId.value = edge.id;
+  }
+};
+
+const getLinkTextFromPassage = (sourcePassageName: string, targetPassageName: string): string => {
+  if (!props.story?.passages) return "";
+  const passage = props.story.passages.find((p) => p.name === sourcePassageName);
+  if (!passage?.content) return "";
+  for (const match of passage.content.matchAll(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g)) {
+    const label = match[1]?.trim() || "";
+    const target = (match[2] ?? match[1])?.trim();
+    if (target === targetPassageName) {
+      return label;
+    }
+  }
+  return "";
+};
+
+interface EdgeOperationInfo {
+  text: string;
+  detail?: string;
+  isBack: boolean;
+  hasTraversed: boolean;
+  stepCount: number;
+}
+
+const getEdgeOperationInfo = (edge: LaidOutEdge): EdgeOperationInfo => {
+  // 查找在玩家探索动线中经过该边的步骤（正向前进或逆向撤回）
+  const steps: Array<{ action: string; type: string; at?: number; stepIndex: number }> = [];
+  validTrace.value.forEach((step, idx) => {
+    if (step.from === edge.source && step.to === edge.target) {
+      steps.push({
+        action: step.action || "",
+        type: step.type === "back" || step.action === "back" ? "back" : "forward",
+        at: step.at,
+        stepIndex: idx + 1,
+      });
+    } else if (
+      (step.type === "back" || step.action === "back") &&
+      step.from === edge.target &&
+      step.to === edge.source
+    ) {
+      steps.push({
+        action: "撤回",
+        type: "back",
+        at: step.at,
+        stepIndex: idx + 1,
+      });
+    }
+  });
+
+  const linkLabel = getLinkTextFromPassage(edge.source, edge.target);
+
+  if (steps.length > 0) {
+    const latest = steps[steps.length - 1];
+    const isBack = latest.type === "back";
+    let text = "";
+
+    if (isBack) {
+      text = "撤回选择";
+    } else if (latest.action && latest.action !== "forward" && latest.action !== "start" && !latest.action.startsWith("goto:")) {
+      text = latest.action.startsWith("display:") ? `展开: ${latest.action.slice(8)}` : latest.action;
+    } else if (linkLabel) {
+      text = linkLabel;
+    } else {
+      text = "探索前进";
+    }
+
+    let detail = `第 ${latest.stepIndex} 步`;
+    if (steps.length > 1) {
+      detail += ` (共经过 ${steps.length} 次)`;
+    }
+    if (latest.at) {
+      detail += ` · ${formatTime(latest.at)}`;
+    }
+
+    return {
+      text,
+      detail,
+      isBack,
+      hasTraversed: true,
+      stepCount: steps.length,
+    };
+  }
+
+  // 未探索场景连线（如全成就全结局达成模式下显示的隐藏分支）
+  if (isNodeMasked(edge.target)) {
+    return {
+      text: "???? (未探索)",
+      detail: "尚未发现该操作分支",
+      isBack: false,
+      hasTraversed: false,
+      stepCount: 0,
+    };
+  }
+
+  return {
+    text: linkLabel ? `选项: ${linkLabel}` : "分支跳转",
+    detail: "尚未在游玩中选择该分支",
+    isBack: false,
+    hasTraversed: false,
+    stepCount: 0,
+  };
+};
+
+function measureTextWidth(text: string): number {
+  let w = 0;
+  for (const ch of text) {
+    const code = ch.codePointAt(0) ?? 0;
+    const isWide =
+      (code >= 0x1100 && code <= 0x115f) ||
+      (code >= 0x2e80 && code <= 0xa4cf) ||
+      (code >= 0xac00 && code <= 0xd7a3) ||
+      (code >= 0xf900 && code <= 0xfaff) ||
+      (code >= 0xfe30 && code <= 0xfe6f) ||
+      (code >= 0xff00 && code <= 0xff60) ||
+      (code >= 0xffe0 && code <= 0xffe6);
+    w += isWide ? 12 : 7;
+  }
+  return w;
+}
+
+const getBadgeWidth = (edge: LaidOutEdge) => {
+  const info = getEdgeOperationInfo(edge);
+  return Math.max(68, measureTextWidth(info.text) + 26);
+};
+
+const getBadgeHaloClass = (edge: LaidOutEdge) => {
+  const info = getEdgeOperationInfo(edge);
+  if (info.isBack) return "fill-warning/25 stroke-warning/70";
+  if (info.hasTraversed) return "fill-primary/25 stroke-primary/70";
+  return "fill-base-content/15 stroke-base-content/30";
+};
+
+const getBadgeRectClass = (edge: LaidOutEdge) => {
+  const info = getEdgeOperationInfo(edge);
+  if (info.isBack) return "fill-warning stroke-warning-content/20 shadow-md";
+  if (info.hasTraversed) return "fill-primary stroke-primary-content/20 shadow-md";
+  return "fill-base-100 stroke-base-content/40 shadow-md";
+};
+
+const getBadgeTextClass = (edge: LaidOutEdge) => {
+  const info = getEdgeOperationInfo(edge);
+  if (info.isBack) return "fill-warning-content font-bold";
+  if (info.hasTraversed) return "fill-primary-content font-bold";
+  return "fill-base-content font-medium";
+};
+
 const getNodeClass = (node: LaidOutNode) => {
+  const isConnected = isNodeConnectedToSelectedEdge(node.id);
+  const isDimmed = Boolean(selectedEdge.value && !isConnected);
+
   return {
     "sg-node-current": isCurrentPassage(node.id),
     "sg-node-visited": visitedInPlayback.value.has(node.id),
     "sg-node-future": allExploredPassages.value.has(node.id) && !visitedInPlayback.value.has(node.id),
     "sg-node-masked": isNodeMasked(node.id),
+    "sg-node-connected": isConnected,
+    "opacity-35 transition-opacity": isDimmed,
   };
 };
 
 const getNodeRectClass = (node: LaidOutNode) => {
+  if (isNodeConnectedToSelectedEdge(node.id)) {
+    return "fill-base-100 stroke-primary stroke-[2.5] shadow-xl";
+  }
   if (isCurrentPassage(node.id)) {
     return "fill-primary stroke-primary text-primary-content shadow-lg";
   }
@@ -688,6 +1015,9 @@ const getNodeRectClass = (node: LaidOutNode) => {
 };
 
 const getNodeTextClass = (node: LaidOutNode) => {
+  if (isNodeConnectedToSelectedEdge(node.id)) {
+    return "fill-primary font-bold";
+  }
   if (isCurrentPassage(node.id)) {
     return "fill-primary-content font-bold";
   }
@@ -701,27 +1031,50 @@ const getNodeTextClass = (node: LaidOutNode) => {
 };
 
 const getEdgeClass = (edge: LaidOutEdge) => {
+  const isSelected = selectedEdgeId.value === edge.id;
+  const isAnySelected = Boolean(selectedEdgeId.value);
   const edgeKey = `${edge.source} -> ${edge.target}`;
   const isTraversed = traversedEdges.value.has(edgeKey);
   const isLatestEdge = activeStep.value?.from === edge.source && activeStep.value?.to === edge.target;
+  const isRollback = activeStep.value?.type === "back" || activeStep.value?.action === "back";
 
-  if (isLatestEdge && (activeStep.value?.type === "back" || activeStep.value?.action === "back")) {
-    return "stroke-warning stroke-2 stroke-dash-3";
+  // 当前边被点击选中点亮
+  if (isSelected) {
+    const isBack = getEdgeOperationInfo(edge).isBack;
+    if (isBack) {
+      return "stroke-warning stroke-[3.5] [filter:drop-shadow(0_0_6px_rgba(234,179,8,0.85))] fill-none";
+    }
+    return "stroke-primary stroke-[3.5] [filter:drop-shadow(0_0_6px_rgba(var(--color-primary),0.85))] fill-none";
+  }
+
+  // 当有选中的边时，其他边淡化
+  if (isAnySelected) {
+    return "stroke-base-content/15 stroke-1 stroke-dash-2 opacity-25 fill-none";
+  }
+
+  if (isLatestEdge && isRollback) {
+    return "stroke-warning stroke-2 stroke-dash-3 fill-none";
   }
   if (isLatestEdge) {
-    return "stroke-primary stroke-2.5";
+    return "stroke-primary stroke-2.5 fill-none";
   }
   if (isTraversed) {
-    return "stroke-primary/70 stroke-1.5";
+    return "stroke-primary/70 stroke-1.5 fill-none";
   }
-  return "stroke-base-300/40 stroke-1 stroke-dash-2";
+  return "stroke-base-content/25 stroke-1 stroke-dash-2 fill-none";
 };
 
 const getEdgeMarker = (edge: LaidOutEdge) => {
+  const isSelected = selectedEdgeId.value === edge.id;
   const edgeKey = `${edge.source} -> ${edge.target}`;
   const isLatestEdge = activeStep.value?.from === edge.source && activeStep.value?.to === edge.target;
+  const isRollback = activeStep.value?.type === "back" || activeStep.value?.action === "back";
 
-  if (isLatestEdge && (activeStep.value?.type === "back" || activeStep.value?.action === "back")) {
+  if (isSelected) {
+    const isBack = getEdgeOperationInfo(edge).isBack;
+    return isBack ? `url(#${uid}-arrow-back)` : `url(#${uid}-arrow-active)`;
+  }
+  if (isLatestEdge && isRollback) {
     return `url(#${uid}-arrow-back)`;
   }
   if (isLatestEdge || traversedEdges.value.has(edgeKey)) {
@@ -855,9 +1208,18 @@ let dragState: { x: number; y: number; moved: boolean } | null = null;
 
 function onPointerDown(e: PointerEvent) {
   if (e.button !== 0) return;
+  const target = e.target as Element | null;
+  const onEdge = !!target?.closest?.(".sg-edge-group");
+  const onNode = !!target?.closest?.("g[role='button']");
+  const isTouchLike = e.pointerType === "touch" || e.pointerType === "pen";
+
+  if ((onEdge || onNode) && !isTouchLike) {
+    return;
+  }
+
   dragState = { x: e.clientX, y: e.clientY, moved: false };
   dragging.value = true;
-  (e.currentTarget as HTMLElement)?.setPointerCapture(e.pointerId);
+  (e.currentTarget as HTMLElement)?.setPointerCapture?.(e.pointerId);
 }
 
 function onPointerMove(e: PointerEvent) {
@@ -877,6 +1239,12 @@ function onPointerMove(e: PointerEvent) {
 
 function onPointerUp(e: PointerEvent) {
   if (dragState) {
+    if (!dragState.moved) {
+      const target = e.target as Element | null;
+      if (!target?.closest?.(".sg-edge-group") && !target?.closest?.("g[role='button']")) {
+        selectedEdgeId.value = null;
+      }
+    }
     dragging.value = false;
     dragState = null;
   }
@@ -944,10 +1312,18 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
+.sg-edge {
+  fill: none !important;
+}
 .stroke-dash-2 {
   stroke-dasharray: 4 3;
 }
 .stroke-dash-3 {
   stroke-dasharray: 6 4;
+}
+.sg-edge-group:hover .sg-edge {
+  stroke-width: 3px;
+  stroke: var(--color-primary);
+  opacity: 1;
 }
 </style>
