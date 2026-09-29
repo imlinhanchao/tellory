@@ -35,14 +35,6 @@ export class AuditLogInterceptor implements NestInterceptor {
       body: this.toSafeJson(req.body),
     };
 
-    this.logger.log(
-      JSON.stringify({
-        type: 'request_audit',
-        stage: 'request',
-        ...basePayload,
-      }),
-    );
-
     return next.handle().pipe(
       tap({
         next: () => {
