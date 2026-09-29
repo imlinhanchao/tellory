@@ -55,16 +55,6 @@ export class AuditLogInterceptor implements NestInterceptor {
             statusCode,
             durationMs,
           });
-
-          this.logger.log(
-            JSON.stringify({
-              type: 'request_audit',
-              stage: 'response',
-              ...basePayload,
-              statusCode,
-              durationMs,
-            }),
-          );
         },
         error: (error: unknown) => {
           const res = http.getResponse<{ statusCode?: number }>();
@@ -77,23 +67,6 @@ export class AuditLogInterceptor implements NestInterceptor {
             durationMs,
             error: error instanceof Error ? error.message : String(error),
           });
-
-          this.logger.error(
-            JSON.stringify({
-              type: 'request_audit',
-              stage: 'error',
-              ...basePayload,
-              statusCode,
-              durationMs,
-              error:
-                error instanceof Error
-                  ? {
-                      name: error.name,
-                      message: error.message,
-                    }
-                  : String(error),
-            }),
-          );
         },
       }),
     );
