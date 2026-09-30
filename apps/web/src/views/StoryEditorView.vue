@@ -314,7 +314,7 @@
                 </button>
               </div>
               <div
-                v-if="currentStoryId && !props.readOnly"
+                v-if="currentStoryId && !props.readOnly && !isMobile"
                 class="tooltip tooltip-bottom"
                 data-tip="历史发布版本与比对"
                 data-tour="btn-history"
