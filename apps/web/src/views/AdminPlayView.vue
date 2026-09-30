@@ -535,7 +535,7 @@
     </div>
 
     <!-- 全屏详情弹窗 -->
-    <dialog ref="detailDialogRef" class="modal">
+    <dialog ref="detailDialogRef" class="modal" @close="closeTraceVisualizer">
       <div class="modal-box w-screen max-w-none h-screen max-h-none rounded-none p-0 flex flex-col overflow-hidden bg-base-100">
         <!-- 顶栏 -->
         <div class="px-3 sm:px-6 py-2.5 sm:py-3 border-b border-base-200 flex items-center justify-between shrink-0 bg-base-100 gap-2">
@@ -740,7 +740,7 @@
                       v-if="currentTrace.length > 0 && detail.decodedDataset"
                       type="button"
                       class="btn btn-xs btn-outline btn-primary gap-1"
-                      @click="isTraceVisualizerOpen = true"
+                      @click="openTraceVisualizer"
                     >
                       <Icon icon="mdi:motion-play-outline" class="w-3.5 h-3.5" />
                       动线回放
@@ -980,6 +980,8 @@
       ref="traceVisualizerDialogRef"
       class="modal"
       :class="{ 'modal-open': isTraceVisualizerOpen }"
+      @close="closeTraceVisualizer"
+      @cancel="closeTraceVisualizer"
     >
       <div class="modal-box w-screen max-w-none h-screen max-h-none rounded-none p-0 flex flex-col overflow-hidden bg-base-100">
         <StoryTracePlayer
@@ -992,11 +994,11 @@
           :user-endings="[{ name: '*' }]"
           :is-ending="detail.isEnding"
           show-close-button
-          @close="isTraceVisualizerOpen = false"
+          @close="closeTraceVisualizer"
         />
       </div>
       <form method="dialog" class="modal-backdrop">
-        <button type="button" @click="isTraceVisualizerOpen = false">close</button>
+        <button type="button" @click="closeTraceVisualizer">close</button>
       </form>
     </dialog>
   </div>
@@ -1139,7 +1141,22 @@ const clearFilter = (key: "storyId" | "userId") => {
   handleSearch();
 };
 
+const openTraceVisualizer = () => {
+  isTraceVisualizerOpen.value = true;
+  if (traceVisualizerDialogRef.value && !traceVisualizerDialogRef.value.open) {
+    traceVisualizerDialogRef.value.showModal();
+  }
+};
+
+const closeTraceVisualizer = () => {
+  isTraceVisualizerOpen.value = false;
+  if (traceVisualizerDialogRef.value?.open) {
+    traceVisualizerDialogRef.value.close();
+  }
+};
+
 const openDetail = async (playId: string) => {
+  closeTraceVisualizer();
   detail.value = null;
   detailLoading.value = true;
   detailDialogRef.value?.showModal();
