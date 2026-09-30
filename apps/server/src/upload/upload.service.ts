@@ -141,6 +141,7 @@ export class UploadService {
     // 文件名格式：hash.timestamp.ext
     const safeFilename = generateHashTimestampFilename(file);
     form.append('file', blob, safeFilename);
+    form.append('directory_path', 'tellory');
 
     const targetUrl = `${baseUrl}/api/v1/files`;
     let response: Response;
