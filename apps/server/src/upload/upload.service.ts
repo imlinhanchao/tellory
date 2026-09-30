@@ -24,6 +24,13 @@ export interface UploadResult {
   files: UploadedFileItem[];
 }
 
+interface IPicFile {
+  id: number;
+  object_key: string;
+  original_name: string;
+  public_url: string;
+}
+
 function getExtensionFromMime(mime: string): string {
   const cleanMime = (mime || '').split(';')[0].trim().toLowerCase();
   switch (cleanMime) {
@@ -54,7 +61,8 @@ function getExtension(name: string, mime: string): string {
   const cleanName = (name || '').trim();
   const lastDot = cleanName.lastIndexOf('.');
   if (lastDot > 0 && lastDot < cleanName.length - 1) {
-    const ext = cleanName.substring(lastDot + 1).toLowerCase();
+    let ext = cleanName.substring(lastDot + 1).toLowerCase();
+    if (ext === 'jpeg') ext = 'jpg';
     // 扩展名必须是 1~16 位字母数字
     if (/^[a-zA-Z0-9]{1,16}$/.test(ext)) {
       return ext;
@@ -64,11 +72,10 @@ function getExtension(name: string, mime: string): string {
   return getExtensionFromMime(mime) || 'png';
 }
 
-function generateHashTimestampFilename(file: IUploadFile): string {
+function generateHashFilename(file: IUploadFile): string {
   const hash = createHash('md5').update(file.buffer).digest('hex');
-  const timestamp = Date.now();
   const ext = getExtension(file.originalname, file.mimetype);
-  return `${hash}.${timestamp}.${ext}`;
+  return `${hash}.${ext}`;
 }
 
 @Injectable()
@@ -127,21 +134,72 @@ export class UploadService {
   }
 
   /**
-   * 单文件上传至 pic 接口
+   * 检查指定路径文件是否已存在
+   */
+  private async checkFileExists(
+    path: string,
+    uploadKey: string,
+    baseUrl: string,
+  ): Promise<IPicFile | null> {
+    try {
+      const targetUrl = `${baseUrl}/api/v1/files/exists?path=${encodeURIComponent(path)}`;
+      const response = await fetch(targetUrl, {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${uploadKey}`,
+          'User-Agent':
+            'Mozilla/5.0 (compatible; Tellory/1.0; +https://tellory.fun)',
+        },
+      });
+
+      if (!response.ok) return null;
+
+      const json = await response.json();
+      if (json?.data?.exists && json?.data?.file?.public_url) {
+        return json.data.file as IPicFile;
+      }
+    } catch {
+      // 检查失败时忽略错误，走正常上传流程
+    }
+    return null;
+  }
+
+  /**
+   * 单文件上传至 pic 接口（上传前检查 tellory 目录下是否存在同名 hash.ext 文件）
    */
   private async uploadSingleFile(
     file: IUploadFile,
     uploadKey: string,
     baseUrl: string,
   ): Promise<UploadedFileItem> {
+    // 保存文件名格式：hash.ext
+    const safeFilename = generateHashFilename(file);
+    const directoryPath = 'tellory';
+    const filePathInDir = `${directoryPath}/${safeFilename}`;
+
+    // 1. 上传前检查文件是否已存在于 tellory 目录
+    const existingFile = await this.checkFileExists(
+      filePathInDir,
+      uploadKey,
+      baseUrl,
+    );
+    if (existingFile) {
+      return {
+        originalName: file.originalname,
+        storedName:
+          existingFile.object_key || existingFile.original_name || safeFilename,
+        url: existingFile.public_url,
+        id: existingFile.id,
+      };
+    }
+
+    // 2. 若不存在则执行上传
     const form = new FormData();
     const blob = new Blob([file.buffer as any], {
       type: file.mimetype || 'application/octet-stream',
     });
-    // 文件名格式：hash.timestamp.ext
-    const safeFilename = generateHashTimestampFilename(file);
     form.append('file', blob, safeFilename);
-    form.append('directory_path', 'tellory');
+    form.append('directory_path', directoryPath);
 
     const targetUrl = `${baseUrl}/api/v1/files`;
     let response: Response;
