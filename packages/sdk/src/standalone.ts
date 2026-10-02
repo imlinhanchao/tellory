@@ -181,7 +181,8 @@ const HELPER_MAP: Record<(typeof HELPER_ORDER)[number], unknown> = {
 function serializeHelpers(): string {
   return HELPER_ORDER.map((name) => {
     const value = HELPER_MAP[name];
-    if (typeof value === "function") return value.toString();
+    if (typeof value === "function")
+      return value.toString().replace(/^function\s+.*?\(/, `function ${name}(`);
     if (value instanceof RegExp) return `const ${name} = ${value.toString()};`;
     if (value instanceof Set)
       return `const ${name} = new Set(${JSON.stringify(Array.from(value))});`;
