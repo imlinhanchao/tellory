@@ -181,8 +181,7 @@ const HELPER_MAP: Record<(typeof HELPER_ORDER)[number], unknown> = {
 function serializeHelpers(): string {
   return HELPER_ORDER.map((name) => {
     const value = HELPER_MAP[name];
-    if (typeof value === "function")
-      return value.toString().replace(/^function\s+.*?\(/, `function ${name}(`);
+    if (typeof value === "function") return `let ${name} = ${value.toString()}`;
     if (value instanceof RegExp) return `const ${name} = ${value.toString()};`;
     if (value instanceof Set)
       return `const ${name} = new Set(${JSON.stringify(Array.from(value))});`;
@@ -257,7 +256,7 @@ export function buildStandaloneExport(
       .story-content ol { list-style-type: decimal; }
       .story-content li { margin: 0.25rem 0; }
       .story-content pre { background: #0f1724; color: #e6eef8; padding: 0.75rem; border-radius: 0.5rem; overflow: auto; margin: 0.75rem 0; }
-      .story-content code { background: #f3f4f6; padding: 0.12rem 0.36rem; border-radius: 0.375rem; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, "Roboto Mono", monospace; font-size: 0.95em; }
+      .story-content code { background: #aaa2; padding: 0.12rem 0.36rem; border-radius: 0.375rem; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, "Roboto Mono", monospace; font-size: 0.95em; }
       .story-content pre code { background: transparent; padding: 0; }
       .story-content blockquote { border-left: 4px solid rgba(99,102,241,0.12); padding: 0.5rem 1rem; margin: 0.6rem 0; background: #fbfbfe; color: #334155; }
       .story-content table { width: 100%; border-collapse: collapse; margin: 0.75rem 0; }
@@ -281,7 +280,7 @@ export function buildStandaloneExport(
     </div>
       <script>
         const story = ${safeStory};
-        const variables = ${safeVariables};
+        const variables = JSON.parse(localStorage.getItem('story-vars') || 'null') ?? ${safeVariables};
         const currentPassageName = ${safeCurrent};
         const GLOBAL_JS_FUNCTIONS = {};
         const POINT_QUEUE_KEY = "__story_point_queue";
@@ -289,6 +288,7 @@ export function buildStandaloneExport(
   ${helpersSrc}
 
         const engineCtx = createDefaultEvaluator(GLOBAL_JS_FUNCTIONS);
+        const root = document.getElementById('story-root');
 
         function renderPassage(passageName) {
           const passage = story.passages.find((p) => p.name === passageName) || story.passages[0];
@@ -296,7 +296,6 @@ export function buildStandaloneExport(
           variables.storyTitle = story.title;
           engineCtx.displayPassages = engineCtx.displayPassages || {};
 
-          const root = document.getElementById('story-root');
           const varRoot = document.getElementById('variables-root');
           let entryRenderVariables = null;
 
@@ -324,40 +323,47 @@ export function buildStandaloneExport(
             });
             updateVars();
             attachListeners();
+            localStorage.setItem('story-render', root.innerHTML);
+            localStorage.setItem('story-vars', JSON.stringify(variables)) 
           }
-
-          function attachListeners() {
-            const nodes = root.querySelectorAll('[data-story-target], [data-story-action], [data-story-display]');
-            nodes.forEach((node) => {
-              node.addEventListener('click', () => {
-                const display = node.getAttribute('data-story-display');
-                if (display) {
-                  engineCtx.displayPassages = engineCtx.displayPassages || {};
-                  engineCtx.displayPassages[display] = true;
-                  // Re-render only (do not re-run entry effects), keeping the
-                  // entry snapshot so (if:) branches stay consistent.
-                  doRender(false, true);
-                  return;
-                }
-
-                const action = node.getAttribute('data-story-action');
-                if (action) {
-                  applyStoryAction(action, variables, engineCtx);
-                }
-                const target = node.getAttribute('data-story-target');
-                if (target) {
-                  renderPassage(target);
-                  return;
-                }
-                doRender(false, false);
-              });
-            });
-          }
-
+          
           doRender(true, false);
         }
 
-        renderPassage(currentPassageName);
+        function attachListeners() {
+          const nodes = root.querySelectorAll('[data-story-target], [data-story-action], [data-story-display]');
+          nodes.forEach((node) => {
+            node.addEventListener('click', () => {
+              const display = node.getAttribute('data-story-display');
+              if (display) {
+                engineCtx.displayPassages = engineCtx.displayPassages || {};
+                engineCtx.displayPassages[display] = true;
+                // Re-render only (do not re-run entry effects), keeping the
+                // entry snapshot so (if:) branches stay consistent.
+                doRender(false, true);
+                return;
+              }
+
+              const action = node.getAttribute('data-story-action');
+              if (action) {
+                applyStoryAction(action, variables, engineCtx);
+              }
+              const target = node.getAttribute('data-story-target');
+              if (target) {
+                renderPassage(target);
+                return;
+              }
+              doRender(false, false);
+            });
+          });
+        }
+
+        const historyRender = localStorage.getItem('story-render');
+        if (historyRender) {
+          root.innerHTML = historyRender;
+          attachListeners();
+        }
+        else renderPassage(currentPassageName);
     </script>
   </body>
 </html>`;
