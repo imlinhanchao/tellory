@@ -281,9 +281,14 @@
                 <button
                   class="btn btn-sm btn-ghost btn-square"
                   type="button"
+                  :disabled="buildingStory"
                   @click="buildStory"
                 >
-                  <Icon icon="mdi:hammer" size="16px" />
+                  <span
+                    v-if="buildingStory"
+                    class="loading loading-spinner loading-xs"
+                  ></span>
+                  <Icon v-else icon="mdi:hammer" size="16px" />
                 </button>
               </div>
               <div
@@ -814,6 +819,7 @@ import {
   listBetaTesters,
   addBetaTester,
   removeBetaTester,
+  exportStandaloneStory,
   IStory,
   type IStoryBetaTester,
 } from "@/api/stories";
@@ -833,7 +839,6 @@ import {
   extractStorySpecials,
   type StoryData,
   type StorySyntaxIssue,
-  buildStandaloneExport,
 } from "@/lib/storyEngine";
 import {} from "@/lib/storyEngine";
 import { storyRouteKey } from "@/lib/storyRoute";
@@ -1430,20 +1435,34 @@ const copyStory = () => {
   }
 };
 
-const buildStory = () => {
-  const source = buildStandaloneExport(
-    story.value,
-    variables.value,
-    selectedPassage.value,
-  );
-  const blob = new Blob([source], { type: "text/plain;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = `${(story.value.title || "story").replace(/\s+/g, "-")}.html`;
-  anchor.click();
-  URL.revokeObjectURL(url);
+const buildingStory = ref(false);
+
+const buildStory = async () => {
+  if (buildingStory.value) return;
+  buildingStory.value = true;
+  try {
+    const res = await exportStandaloneStory({
+      story: story.value,
+      variables: variables.value,
+      currentPassage: selectedPassage.value,
+    });
+    const source = typeof res === "string" ? res : res?.html || "";
+    const blob = new Blob([source], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `${(story.value.title || "story").replace(/\s+/g, "-")}.html`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+    msg.success("导出成功！");
+  } catch (e: any) {
+    console.error(e);
+    msg.error(e?.message || "生成导出文件失败");
+  } finally {
+    buildingStory.value = false;
+  }
 };
+
 
 /**
  * 保存前先做一次语法检查：弹出对话框显示 loading，检查完成后

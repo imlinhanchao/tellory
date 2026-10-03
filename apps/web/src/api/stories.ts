@@ -241,3 +241,20 @@ export async function removeBetaTester(storyId: string, userId: string) {
     url: `/stories/${storyId}/beta-testers/${userId}`,
   });
 }
+
+export interface ExportStoryPayload {
+  id?: string;
+  story?: StoryData;
+  content?: string;
+  variables?: Record<string, unknown>;
+  currentPassage?: string;
+}
+
+/** 在后端调用 buildStandaloneExport 导出单文件可运行故事 HTML */
+export async function exportStandaloneStory(payload: ExportStoryPayload) {
+  return request.post<{ html: string }>({
+    url: "/stories/export",
+    data: payload,
+  });
+}
+

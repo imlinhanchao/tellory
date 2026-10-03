@@ -2,6 +2,7 @@ import {
   Injectable,
   ForbiddenException,
   NotFoundException,
+  BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Like, LessThanOrEqual, In, Brackets } from 'typeorm';
@@ -13,7 +14,13 @@ import { StoryHistory } from './story-history.entity';
 import { StoryLike } from './story-like.entity';
 import { Play } from '../play/play.entity';
 import { Comment } from '../comment/comment.entity';
-import { StoryDto } from './stories.dto';
+import { StoryDto, ExportStoryDto } from './stories.dto';
+import {
+  buildStandaloneExport,
+  parseStorySource,
+  buildInitialVariables,
+  type StoryData,
+} from 'tellory';
 import { omit } from 'src/utils';
 import { FingerTo } from 'fishpi';
 import { ConfigService } from 'src/config/config.service';
@@ -1049,5 +1056,55 @@ export class StoriesService {
 
   async removeBetaTester(storyId: string, userId: string): Promise<void> {
     await this.storyBetaTesterRepo.delete({ storyId, userId });
+  }
+
+  async exportStandalone(
+    dto: ExportStoryDto,
+    userId?: string,
+    isAdmin?: boolean,
+  ): Promise<{ html: string }> {
+    let storyData: StoryData;
+    let variables = dto.variables;
+    let currentPassage = dto.currentPassage;
+
+    if (dto.story) {
+      storyData = dto.story;
+    } else if (dto.content) {
+      storyData = parseStorySource(dto.content);
+    } else if (dto.id) {
+      const story = await this.findOne(dto.id);
+      if (!story) {
+        throw new NotFoundException('故事不存在');
+      }
+      if (
+        story.status === 'draft' &&
+        story.authorId !== userId &&
+        !isAdmin &&
+        !(await this.isBetaTester(story.id, userId))
+      ) {
+        throw new ForbiddenException('无权访问该故事');
+      }
+      storyData = parseStorySource(story.content);
+      if (!storyData.title && story.title) {
+        storyData.title = story.title;
+      }
+    } else {
+      throw new BadRequestException('缺少故事内容或ID');
+    }
+
+    if (!storyData || !Array.isArray(storyData.passages)) {
+      throw new BadRequestException('故事数据无效，缺少段落列表');
+    }
+
+    if (!variables) {
+      variables = buildInitialVariables(storyData);
+    }
+    if (!currentPassage) {
+      currentPassage =
+        storyData.startPassage || storyData.passages?.[0]?.name || 'Start';
+    }
+
+    const html = buildStandaloneExport(storyData, variables, currentPassage);
+    return { html };
   }
 }

@@ -14,7 +14,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { OptionalAuthGuard } from '../auth/optional-auth.guard';
 import { AdminGuard } from '../auth/admin.guard';
 import { StoriesService, StorySort } from './stories.service';
-import { StoryDto, RejectDto } from './stories.dto';
+import { StoryDto, RejectDto, ExportStoryDto } from './stories.dto';
 import { StoryRuntimeService } from './story-runtime.service';
 import { getDomain } from 'src/utils';
 
@@ -114,6 +114,30 @@ export class StoriesController {
       throw new Error('故事尚未发布');
     }
     return story;
+  }
+
+  @UseGuards(OptionalAuthGuard)
+  @Post('export')
+  async exportStory(@Body() dto: ExportStoryDto, @Request() req) {
+    return this.storiesService.exportStandalone(
+      dto,
+      req?.user?.userId,
+      req?.user?.isAdmin,
+    );
+  }
+
+  @UseGuards(OptionalAuthGuard)
+  @Post(':id/export')
+  async exportStoryById(
+    @Param('id') id: string,
+    @Body() dto: ExportStoryDto,
+    @Request() req,
+  ) {
+    return this.storiesService.exportStandalone(
+      { ...dto, id },
+      req?.user?.userId,
+      req?.user?.isAdmin,
+    );
   }
 
   @UseGuards(JwtAuthGuard)

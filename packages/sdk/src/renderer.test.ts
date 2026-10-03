@@ -254,6 +254,8 @@ describe("renderStoryText — style tags and (display:) in (if:)", () => {
     expect(standaloneHtml).toContain("replaceIfMacros");
     expect(standaloneHtml).toContain("expandDisplayPassages");
     expect(standaloneHtml).toContain(".choice");
+    expect(standaloneHtml).toContain('id="reset-btn"');
+    expect(standaloneHtml).toContain("location.reload()");
   });
 });
 

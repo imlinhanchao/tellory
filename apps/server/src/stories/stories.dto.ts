@@ -1,4 +1,10 @@
-import { IsString, IsOptional, IsNumber, IsArray } from 'class-validator';
+import {
+  IsString,
+  IsOptional,
+  IsNumber,
+  IsArray,
+  IsObject,
+} from 'class-validator';
 
 export class StoryDto {
   @IsString()
@@ -47,4 +53,26 @@ export class StoryDto {
 export class RejectDto {
   @IsString()
   reason?: string;
+}
+
+export class ExportStoryDto {
+  @IsOptional()
+  @IsString()
+  id?: string;
+
+  @IsOptional()
+  @IsObject()
+  story?: any;
+
+  @IsOptional()
+  @IsString()
+  content?: string;
+
+  @IsOptional()
+  @IsObject()
+  variables?: Record<string, unknown>;
+
+  @IsOptional()
+  @IsString()
+  currentPassage?: string;
 }

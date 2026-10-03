@@ -234,6 +234,8 @@ export function buildStandaloneExport(
       .story-end { background: #fef3c7; color: #78350f; border-radius: 12px; padding: 0.5rem 1rem; margin: 1rem 0; }
       .meta { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
       .badge { background: #eef2ff; color: #3730a3; border-radius: 999px; padding: 0.35rem 0.6rem; font-size: 0.75rem; }
+      .reset-btn { background: transparent; color: #64748b; border: 1px solid #cbd5e1; border-radius: 999px; padding: 0.25rem 0.75rem; font-size: 0.75rem; cursor: pointer; transition: all 0.15s ease; }
+      .reset-btn:hover { background: #fee2e2; color: #ef4444; border-color: #fca5a5; }
       .sidebar { margin-top: 1rem; padding: 1rem; background: #f8fafc; border-radius: 12px; }
       .hidden { display: none; }
       .var-list { display: grid; gap: 0.5rem; }
@@ -270,6 +272,7 @@ export function buildStandaloneExport(
     <div class="story-shell">
       <div class="meta">
         <span class="badge">织言 · Tellory</span>
+        <button id="reset-btn" class="reset-btn" type="button">重置</button>
       </div>
       <h1 class="story-title">${escapeHtml(story.title)}</h1>
       <div id="story-root" class="story-content"></div>
@@ -280,8 +283,11 @@ export function buildStandaloneExport(
     </div>
       <script>
         const story = ${safeStory};
-        const variables = JSON.parse(localStorage.getItem('story-vars') || 'null') ?? ${safeVariables};
-        const currentPassageName = ${safeCurrent};
+        const renderStorageKey = 'story-render_' + story.title;
+        const varsStorageKey = 'story-vars_' + story.title;
+        const passageStorageKey = 'story-passage_' + story.title;
+        const variables = JSON.parse(localStorage.getItem(varsStorageKey) || 'null') ?? ${safeVariables};
+        const currentPassageName = localStorage.getItem(passageStorageKey) || ${safeCurrent};
         const GLOBAL_JS_FUNCTIONS = {};
         const POINT_QUEUE_KEY = "__story_point_queue";
 
@@ -289,46 +295,53 @@ export function buildStandaloneExport(
 
         const engineCtx = createDefaultEvaluator(GLOBAL_JS_FUNCTIONS);
         const root = document.getElementById('story-root');
+        const varRoot = document.getElementById('variables-root');
+        let currentPassage = story.passages.find((p) => p.name === currentPassageName);
+
+        function updateVars() {
+          const entries = Object.entries(variables).filter(([key]) => key !== 'passage' && key !== 'storyTitle');
+          varRoot.innerHTML = entries.length
+            ? entries.map(([key, value]) => \`<div class="var-item"><span>\${escapeHtml(key)}</span><strong>\${escapeHtml(String(value))}</strong></div>\`).join('')
+            : '<p>暂无变量</p>';
+        }
+
+        function doRender(runEntryEffects, useEntrySnapshot) {
+          let entryRenderVariables = null;
+          let renderVars;
+          if (runEntryEffects) {
+            entryRenderVariables = { ...variables };
+            renderVars = undefined;
+          } else if (useEntrySnapshot && entryRenderVariables) {
+            renderVars = { ...entryRenderVariables };
+          } else {
+            renderVars = undefined;
+          }
+          const contentForRender = extractAndRegisterFunctions(currentPassage.content, GLOBAL_JS_FUNCTIONS);
+          root.innerHTML = renderStoryText(contentForRender, variables, story, engineCtx, {
+            applyEntryEffects: runEntryEffects,
+            ...(renderVars ? { renderVariables: renderVars } : {}),
+          });
+          updateVars();
+          attachListeners();
+          localStorage.setItem(renderStorageKey, root.innerHTML);
+          localStorage.setItem(varsStorageKey, JSON.stringify(variables));
+        }
 
         function renderPassage(passageName) {
+          localStorage.setItem(passageStorageKey, passageName);
           const passage = story.passages.find((p) => p.name === passageName) || story.passages[0];
+          currentPassage = passage;
           variables.passage = passage.name;
           variables.storyTitle = story.title;
           engineCtx.displayPassages = engineCtx.displayPassages || {};
-
-          const varRoot = document.getElementById('variables-root');
-          let entryRenderVariables = null;
-
-          function updateVars() {
-            const entries = Object.entries(variables).filter(([key]) => key !== 'passage' && key !== 'storyTitle');
-            varRoot.innerHTML = entries.length
-              ? entries.map(([key, value]) => \`<div class="var-item"><span>\${escapeHtml(key)}</span><strong>\${escapeHtml(String(value))}</strong></div>\`).join('')
-              : '<p>暂无变量</p>';
-          }
-
-          function doRender(runEntryEffects, useEntrySnapshot) {
-            let renderVars;
-            if (runEntryEffects) {
-              entryRenderVariables = { ...variables };
-              renderVars = undefined;
-            } else if (useEntrySnapshot && entryRenderVariables) {
-              renderVars = { ...entryRenderVariables };
-            } else {
-              renderVars = undefined;
-            }
-            const contentForRender = extractAndRegisterFunctions(passage.content, GLOBAL_JS_FUNCTIONS);
-            root.innerHTML = renderStoryText(contentForRender, variables, story, engineCtx, {
-              applyEntryEffects: runEntryEffects,
-              ...(renderVars ? { renderVariables: renderVars } : {}),
-            });
-            updateVars();
-            attachListeners();
-            localStorage.setItem('story-render', root.innerHTML);
-            localStorage.setItem('story-vars', JSON.stringify(variables)) 
-          }
           
           doRender(true, false);
         }
+
+				function decodeHTMLEntities(str) {
+					const doc = new DOMParser().parseFromString(str, 'text/html');
+					return doc.documentElement.textContent;
+				}
 
         function attachListeners() {
           const nodes = root.querySelectorAll('[data-story-target], [data-story-action], [data-story-display]');
@@ -346,7 +359,7 @@ export function buildStandaloneExport(
 
               const action = node.getAttribute('data-story-action');
               if (action) {
-                applyStoryAction(action, variables, engineCtx);
+                applyStoryAction(decodeHTMLEntities(action), variables, engineCtx);
               }
               const target = node.getAttribute('data-story-target');
               if (target) {
@@ -358,7 +371,20 @@ export function buildStandaloneExport(
           });
         }
 
-        const historyRender = localStorage.getItem('story-render');
+        const resetBtn = document.getElementById('reset-btn');
+        if (resetBtn) {
+          resetBtn.addEventListener('click', () => {
+            try {
+              localStorage.removeItem(renderStorageKey);
+              localStorage.removeItem(varsStorageKey);
+              localStorage.removeItem(passageStorageKey);
+              localStorage.clear();
+            } catch (e) {}
+            location.reload();
+          });
+        }
+
+        const historyRender = localStorage.getItem(renderStorageKey);
         if (historyRender) {
           root.innerHTML = historyRender;
           attachListeners();
