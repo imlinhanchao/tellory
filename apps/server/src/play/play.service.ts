@@ -215,8 +215,6 @@ export class PlayService {
         'play.isEnding',
         'play.createdAt',
         'play.updatedAt',
-        'play.history',
-        'play.trace',
       ])
       .where('play.createdAt <= :createdAt', { createdAt })
       .orderBy('play.createdAt', 'DESC')
