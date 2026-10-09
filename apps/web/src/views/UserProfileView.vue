@@ -161,7 +161,7 @@
           >
             <div class="flex justify-between items-start">
               <h4 class="font-bold text-lg truncate flex items-center gap-2">
-                {{ p.title }}
+                <span class="truncate">{{ p.title }}</span>
                 <button class="btn btn-ghost btn-xs" @click="previewStory(progressRouteKey(p), p.status)">
                   <Icon icon="mdi:book-open-variant" />
                 </button>
@@ -174,7 +174,7 @@
                   <Icon icon="mdi:graph-outline" />
                 </button>
               </h4>
-              <span class="badge badge-sm" :class="p.isPlaying ? 'badge-primary' : 'badge-ghost'">
+              <span class="badge badge-sm whitespace-nowrap" :class="p.isPlaying ? 'badge-primary' : 'badge-ghost'">
                 {{ p.isPlaying ? "正在阅读" : "已读" }}
               </span>
             </div>
