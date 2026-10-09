@@ -215,7 +215,7 @@ export class StoryRuntimeService {
   }
 
   private evaluateInSandbox(expression: string, variables: Variables): unknown {
-    const compiled = expression
+    let compiled = expression
       .replace(
         /\$([A-Za-z_][A-Za-z0-9_]*)/g,
         (_all, name: string) => `vars[${JSON.stringify(name)}]`,
@@ -225,6 +225,16 @@ export class StoryRuntimeService {
       .replace(/\band\b/gi, '&&')
       .replace(/\bor\b/gi, '||')
       .replace(/\bnot\b/gi, '!');
+
+    // Handle infix "contains" expressions such as `a contains b` by delegating
+    // the check to a sandbox-local helper function __contains__ injected by
+    // runInSandbox. This keeps the runtime logic centralized inside the isolate.
+    const containsRegex = /([^\s()]+)\s+contains\s+([^\s()]+)/gi;
+    compiled = compiled.replace(
+      containsRegex,
+      (_all, left, right) => `__contains__(${left}, ${right})`,
+    );
+
     return this.runInSandbox(
       `(${compiled})`,
       variables,
@@ -283,7 +293,7 @@ export class StoryRuntimeService {
       );
       context.global.setSync('args', new ivm.ExternalCopy(args).copyInto());
       const script = isolate.compileScriptSync(
-        `const result = ${scriptSource}; ({ result, variables: vars });`,
+        `const __contains__ = (left, right) => (Array.isArray(left) ? left.includes(right) : ((left) != null && String(left).includes(right))); const result = ${scriptSource}; ({ result, variables: vars });`,
       );
       return script.runSync(context, { timeout, copy: true }) as {
         result: unknown;
