@@ -187,3 +187,94 @@ export const adminDeletePlay = (playId: string) => {
     url: `/play/admin/${playId}`,
   });
 };
+
+export interface IStoryReaderPlaySummary {
+  id: string;
+  storyId: string;
+  currentPassage: string;
+  isEnding: boolean;
+  createdAt: number;
+  updatedAt: number;
+  stepCount: number;
+  endingName?: string | null;
+}
+
+export interface IStoryReaderProgress {
+  user: User | null;
+  userId?: string | null;
+  points: Array<{ name: string; description: string; unlockedAt?: number }>;
+  end: Array<{ name: string; description: string; unlockedAt?: number }>;
+  plays: IStoryReaderPlaySummary[];
+  latestActiveAt: number;
+  totalPlays: number;
+  completedPlays: number;
+  inProgressPlays: number;
+}
+
+export interface IStoryReadersProgressResponse {
+  story: {
+    id: string;
+    title: string;
+    shortname?: string | null;
+    authorId: string;
+    status: string;
+    pointSize?: number | null;
+    endSize?: number | null;
+    passageSize?: number | null;
+  };
+  stats: {
+    totalReaders: number;
+    totalPlays: number;
+    completedPlays: number;
+    inProgressPlays: number;
+  };
+  readers: IStoryReaderProgress[];
+}
+
+export interface IStoryReaderPlayDetailResponse extends Omit<IAdminPlayRow, 'story'> {
+  story?: {
+    id: string;
+    title?: string;
+    shortname?: string | null;
+    authorId?: string;
+    status?: string;
+    pointSize?: number | null;
+    endSize?: number | null;
+    passageSize?: number | null;
+  } | null;
+  decodedDataset?: Record<string, any> | null;
+  playUnlocks: Array<{
+    id: string;
+    type: string;
+    name: string;
+    description: string;
+    unlockedAt: number;
+  }>;
+  userUnlocks: Array<{
+    id: string;
+    type: string;
+    name: string;
+    description: string;
+    unlockedAt: number;
+  }>;
+  readerPlays: Array<{
+    id: string;
+    currentPassage: string;
+    isEnding: boolean;
+    createdAt: number;
+    updatedAt: number;
+    stepCount?: number;
+  }>;
+}
+
+export const getStoryReadersProgress = (storyId: string) => {
+  return request.get<IStoryReadersProgressResponse>({
+    url: `/play/author/${storyId}/readers`,
+  });
+};
+
+export const getStoryReaderPlayDetail = (storyId: string, playId: string) => {
+  return request.get<IStoryReaderPlayDetailResponse>({
+    url: `/play/author/${storyId}/play/${playId}`,
+  });
+};

@@ -67,6 +67,15 @@
             <Icon icon="mdi:information-outline" class="size-3.5" />
             <span>简介</span>
           </button>
+          <button
+            v-if="canViewReadersProgress"
+            class="btn btn-ghost btn-xs gap-1 hover:text-base-content text-primary"
+            title="查看读者阅读进度"
+            @click="router.push(`/story/${storyId}/play`)"
+          >
+            <Icon icon="mdi:account-group-outline" class="size-3.5" />
+            <span>读者进度</span>
+          </button>
         </div>
       </div>
 
@@ -1032,6 +1041,14 @@ const canUndo = computed(
   () =>
     Array.isArray(play.value?.history) &&
     (play.value?.history?.length || 0) > 1,
+);
+const canViewReadersProgress = computed(
+  () =>
+    Boolean(
+      userInfo.value &&
+        (userInfo.value.isAdmin ||
+          (story.value?.authorId && story.value?.authorId == userInfo.value.id)),
+    ),
 );
 
 watch(

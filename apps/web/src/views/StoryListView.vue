@@ -289,6 +289,17 @@
               />
             </button>
             <button
+              v-if="s.authorId == getUser?.id && isCurrentUser"
+              class="btn btn-ghost btn-xs btn-square hover:bg-base-300/50"
+              @click="router.push({ name: 'story-readers-progress', params: { storyId: storyRouteKey(s) } })"
+              title="读者阅读进度"
+            >
+              <Icon
+                icon="mdi:account-group-outline"
+                class="w-4 h-4 text-base-content/70"
+              />
+            </button>
+            <button
               v-if="s.authorId == getUser?.id && isCurrentUser && s.status === 'draft'"
               class="btn btn-ghost btn-xs btn-square hover:bg-error/10 hover:text-error"
               @click="confirmDelete(s.id!)"
@@ -300,6 +311,16 @@
               />
             </button>
             <template v-if="isAdminView">
+              <button
+                class="btn btn-ghost btn-xs btn-square hover:bg-base-300/50"
+                @click="router.push({ name: 'story-readers-progress', params: { storyId: storyRouteKey(s) } })"
+                title="读者阅读进度"
+              >
+                <Icon
+                  icon="mdi:account-group-outline"
+                  class="w-4 h-4 text-base-content/70"
+                />
+              </button>
               <button
                 v-if="s.status === 'published'"
                 class="btn btn-ghost btn-error btn-xs btn-square hover:bg-error/10 hover:text-error"

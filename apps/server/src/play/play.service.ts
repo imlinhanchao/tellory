@@ -1,4 +1,8 @@
-import { Injectable } from '@nestjs/common';
+import {
+  Injectable,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
 import { Play } from './play.entity';
@@ -6,6 +10,8 @@ import { omit } from 'src/utils';
 import { PlayUnlock } from './play.unlock.entity';
 import { PlayStoryDto } from './play.dto';
 import { StoriesService } from '../stories/stories.service';
+import { StoryRuntimeService } from '../stories/story-runtime.service';
+import { parseStorySource } from 'tellory';
 import { User } from 'src/users/user.entity';
 import { UsersService } from 'src/users/users.service';
 import { Story } from 'src/stories/story.entity';
@@ -26,6 +32,7 @@ export class PlayService {
     private playUnlockRepo: Repository<PlayUnlock>,
     private readonly storiesService: StoriesService,
     private readonly usersService: UsersService,
+    private readonly storyRuntimeService: StoryRuntimeService,
   ) {}
 
   async create(payload: Partial<Play>): Promise<Play> {
@@ -270,6 +277,320 @@ export class PlayService {
       page,
       limit: take,
       totalPages: Math.max(1, Math.ceil(total / take)),
+    };
+  }
+
+  async getStoryReadersProgress(
+    storyIdOrName: string,
+    requestingUserId: string,
+    isAdmin = false,
+  ) {
+    let story: any = await this.storiesService.findOne(storyIdOrName);
+    if (!story) {
+      story = await this.storiesService.findApprovedOne(storyIdOrName);
+    }
+    if (!story) {
+      throw new NotFoundException('故事不存在');
+    }
+
+    const isAuthor = story.authorId === requestingUserId;
+    if (!isAuthor && !isAdmin) {
+      throw new ForbiddenException('仅故事作者或管理员可访问读者阅读进度');
+    }
+
+    const storyIds = new Set<string>();
+    if (story.id) storyIds.add(story.id);
+    if (story.shortname) storyIds.add(story.shortname);
+    if (story.sourceStoryId) storyIds.add(story.sourceStoryId);
+
+    const targetStoryIds = Array.from(storyIds);
+
+    const plays = await this.playRepo.find({
+      where: { storyId: In(targetStoryIds) },
+      order: { updatedAt: 'DESC' },
+    });
+
+    const unlocks = await this.playUnlockRepo.find({
+      where: { storyId: In(targetStoryIds) },
+      order: { unlockedAt: 'ASC' },
+    });
+
+    const userIds = Array.from(
+      new Set([
+        ...plays.map((p) => p.userId).filter(Boolean),
+        ...unlocks.map((u) => u.userId).filter(Boolean),
+      ]),
+    ) as string[];
+
+    const users = userIds.length ? await this.usersService.getUsers(userIds) : [];
+    const userMap = new Map<string, Partial<User>>();
+    for (const u of users) {
+      userMap.set(u.id, omit(u, User.unsafeKey));
+    }
+
+    const readerMap = new Map<
+      string,
+      {
+        userId: string | null;
+        user: Partial<User> | null;
+        plays: any[];
+        points: any[];
+        end: any[];
+        latestActiveAt: number;
+      }
+    >();
+
+    for (const userId of userIds) {
+      const user = userMap.get(userId) || null;
+      readerMap.set(userId, {
+        userId,
+        user,
+        plays: [],
+        points: [],
+        end: [],
+        latestActiveAt: 0,
+      });
+    }
+
+    for (const u of unlocks) {
+      if (!u.userId) continue;
+      const reader = readerMap.get(u.userId);
+      if (!reader) continue;
+      if (u.type === 'achievement') {
+        if (!reader.points.some((p) => p.name === u.name)) {
+          reader.points.push({
+            name: u.name,
+            description: u.description,
+            unlockedAt: u.unlockedAt,
+          });
+        }
+      } else if (u.type === 'ending') {
+        if (!reader.end.some((e) => e.name === u.name)) {
+          reader.end.push({
+            name: u.name,
+            description: u.description,
+            unlockedAt: u.unlockedAt,
+          });
+        }
+      }
+    }
+
+    for (const p of plays) {
+      const uId = p.userId || '__anonymous__';
+      let reader = readerMap.get(uId);
+      if (!reader) {
+        reader = {
+          userId: p.userId || null,
+          user: null,
+          plays: [],
+          points: [],
+          end: [],
+          latestActiveAt: 0,
+        };
+        readerMap.set(uId, reader);
+      }
+
+      const stepCount =
+        p.trace && p.trace.length > 0
+          ? p.trace.length
+          : p.history && p.history.length > 0
+            ? p.history.length
+            : 0;
+
+      const playEnding = unlocks.find(
+        (u) => u.playId === p.id && u.type === 'ending',
+      );
+
+      const playSummary = {
+        id: p.id,
+        storyId: p.storyId,
+        currentPassage: p.currentPassage,
+        isEnding: p.isEnding,
+        createdAt: Number(p.createdAt),
+        updatedAt: Number(p.updatedAt),
+        stepCount,
+        endingName: playEnding?.name || null,
+      };
+
+      reader.plays.push(playSummary);
+      if (Number(p.updatedAt) > reader.latestActiveAt) {
+        reader.latestActiveAt = Number(p.updatedAt);
+      }
+    }
+
+    const readers = Array.from(readerMap.values())
+      .filter(
+        (r) => r.plays.length > 0 || r.points.length > 0 || r.end.length > 0,
+      )
+      .map((r) => {
+        r.plays.sort((a, b) => b.updatedAt - a.updatedAt);
+        const completedPlays = r.plays.filter((p) => p.isEnding).length;
+        const inProgressPlays = r.plays.filter((p) => !p.isEnding).length;
+        return {
+          userId: r.userId,
+          user: r.user,
+          points: r.points,
+          end: r.end,
+          plays: r.plays,
+          latestActiveAt: r.latestActiveAt || (r.plays[0]?.updatedAt ?? 0),
+          totalPlays: r.plays.length,
+          completedPlays,
+          inProgressPlays,
+        };
+      })
+      .sort((a, b) => b.latestActiveAt - a.latestActiveAt);
+
+    const totalPlays = plays.length;
+    const completedPlays = plays.filter((p) => p.isEnding).length;
+    const inProgressPlays = plays.filter((p) => !p.isEnding).length;
+
+    return {
+      story: {
+        id: story.id,
+        title: story.title,
+        shortname: story.shortname,
+        authorId: story.authorId,
+        status: story.status || 'published',
+        pointSize: story.pointSize ?? 0,
+        endSize: story.endSize ?? 0,
+        passageSize: story.passageSize ?? 0,
+      },
+      stats: {
+        totalReaders: readers.length,
+        totalPlays,
+        completedPlays,
+        inProgressPlays,
+      },
+      readers,
+    };
+  }
+
+  async getStoryReaderPlayDetail(
+    storyIdOrName: string,
+    playId: string,
+    requestingUserId: string,
+    isAdmin = false,
+  ) {
+    const play = await this.playRepo.findOne({ where: { id: playId } });
+    if (!play) {
+      throw new NotFoundException('游玩记录不存在');
+    }
+
+    let story: any = await this.storiesService.findById(play.storyId, false);
+    if (!story) {
+      story = await this.storiesService.findById(storyIdOrName, false);
+    }
+    if (!story) {
+      story = await this.storiesService.findApprovedOne(play.storyId);
+    }
+    if (!story) {
+      story = await this.storiesService.findApprovedOne(storyIdOrName);
+    }
+    if (!story) {
+      throw new NotFoundException('故事不存在');
+    }
+
+    const isAuthor = story.authorId === requestingUserId;
+    if (!isAuthor && !isAdmin) {
+      throw new ForbiddenException('仅故事作者或管理员可访问读者游玩记录');
+    }
+
+    let user: Partial<User> | null = null;
+    if (play.userId) {
+      const rawUser = await this.usersService.findById(play.userId);
+      if (rawUser) {
+        user = omit(rawUser, User.unsafeKey);
+      }
+    }
+
+    let decodedDataset = this.storyRuntimeService.decodeDataset(
+      play.dataset || '',
+    );
+    if (!decodedDataset && story.content) {
+      try {
+        const parsed = parseStorySource(story.content);
+        decodedDataset = {
+          title: parsed.title,
+          startPassage: parsed.startPassage,
+          passages: parsed.passages,
+        };
+      } catch {
+        // ignore
+      }
+    }
+
+    const trace =
+      play.trace && play.trace.length > 0
+        ? play.trace
+        : (play.history || []).map((h) => ({
+            from: h.from,
+            to: h.to,
+            action: h.action,
+            at: h.at,
+            type:
+              h.action === 'start' ? ('start' as const) : ('forward' as const),
+          }));
+
+    const playUnlocks = await this.playUnlockRepo.find({
+      where: { playId: play.id },
+    });
+
+    const userUnlocks = play.userId
+      ? await this.playUnlockRepo.find({
+          where: { userId: play.userId, storyId: play.storyId },
+        })
+      : [];
+
+    let siblingPlays: any[] = [];
+    if (play.userId) {
+      const allUserPlays = await this.playRepo.find({
+        where: { userId: play.userId, storyId: play.storyId },
+        select: {
+          id: true,
+          currentPassage: true,
+          isEnding: true,
+          createdAt: true,
+          updatedAt: true,
+          trace: true,
+          history: true,
+        },
+        order: { createdAt: 'DESC' },
+      });
+      siblingPlays = allUserPlays.map((sp) => ({
+        id: sp.id,
+        currentPassage: sp.currentPassage,
+        isEnding: sp.isEnding,
+        createdAt: Number(sp.createdAt),
+        updatedAt: Number(sp.updatedAt),
+        stepCount:
+          sp.trace && sp.trace.length > 0
+            ? sp.trace.length
+            : sp.history && sp.history.length > 0
+              ? sp.history.length
+              : 0,
+      }));
+    }
+
+    return {
+      ...play,
+      createdAt: Number(play.createdAt),
+      updatedAt: Number(play.updatedAt),
+      trace,
+      user,
+      story: {
+        id: story.id,
+        title: story.title,
+        shortname: story.shortname,
+        authorId: story.authorId,
+        status: story.status || 'published',
+        pointSize: story.pointSize ?? 0,
+        endSize: story.endSize ?? 0,
+        passageSize: story.passageSize ?? 0,
+      },
+      decodedDataset,
+      playUnlocks,
+      userUnlocks,
+      readerPlays: siblingPlays,
     };
   }
 }

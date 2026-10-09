@@ -60,7 +60,12 @@ export class PlayController {
 
     if (play) {
       if (play.userId !== userId && !isAdmin) {
-        throw new Error('无权访问该游玩记录');
+        const story = play.storyId
+          ? await this.storiesService.findById(play.storyId, false)
+          : null;
+        if (!story || story.authorId !== userId) {
+          throw new Error('无权访问该游玩记录');
+        }
       }
     } else {
       play = await this.playService.findLatestByStoryId(identifier, userId);
@@ -114,6 +119,34 @@ export class PlayController {
       history: play.history || [],
       decodedDataset,
     };
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('author/:storyId/readers')
+  async getStoryReadersProgress(
+    @Param('storyId') storyId: string,
+    @Request() req,
+  ) {
+    return this.playService.getStoryReadersProgress(
+      storyId,
+      req.user.userId,
+      req.user.isAdmin,
+    );
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('author/:storyId/play/:playId')
+  async getStoryReaderPlayDetail(
+    @Param('storyId') storyId: string,
+    @Param('playId') playId: string,
+    @Request() req,
+  ) {
+    return this.playService.getStoryReaderPlayDetail(
+      storyId,
+      playId,
+      req.user.userId,
+      req.user.isAdmin,
+    );
   }
 
   @UseGuards(JwtAuthGuard)

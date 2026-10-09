@@ -67,6 +67,18 @@ const router = createRouter({
           meta: { title: "消息通知", loginRequired: true },
         },
         {
+          path: "/story/:storyId/play",
+          name: "story-readers-progress",
+          component: () => import("@/views/StoryReadersProgressView.vue"),
+          meta: { title: "读者阅读进度", loginRequired: true },
+        },
+        {
+          path: "/story/:storyId/play/:playId",
+          name: "story-reader-play-detail",
+          component: () => import("@/views/StoryReaderPlayDetailView.vue"),
+          meta: { title: "读者进度详情", loginRequired: true },
+        },
+        {
           path: "/play/:storyId",
           name: "play",
           component: () => import("@/views/PlayView.vue"),
