@@ -1853,11 +1853,17 @@ const renamePassage = async () => {
   }
 };
 
-const deletePassage = () => {
+const deletePassage = async () => {
   if (story.value.passages.length <= 1) {
     return;
   }
   const toDelete = selectedPassage.value;
+  const confirmed = await msgbox.confirm(
+    `确定要删除段落 “${toDelete}” 吗？此操作不可恢复。`,
+    "删除段落",
+    { confirmText: "删除", cancelText: "取消" },
+  );
+  if (!confirmed) return;
   story.value.passages = story.value.passages.filter(
     (passage) => passage.name !== toDelete,
   );
